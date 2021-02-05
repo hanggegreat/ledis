@@ -51,9 +51,7 @@ func (m *Master) startRPCServer() {
 	}()
 }
 
-// stopRPCServer stops the master RPC server.
-// This must be done through an RPC to avoid race conditions between the RPC
-// server thread and the current thread.
+// 关闭 Master rpc server
 func (m *Master) stopRPCServer() {
 	var reply ShutdownReply
 	ok := call(m.address, "Master.Shutdown", new(struct{}), &reply)

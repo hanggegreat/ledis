@@ -146,9 +146,6 @@ func (m *Master) RpcAddOne(args *RpcArgs, reply *RpcReply) error {
 	return nil
 }
 
-
-
-
 //
 // 返回该 worker 结点上是否所有任务都已经执行完成
 //
@@ -166,7 +163,7 @@ func (m *Master) Done() bool {
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 
-	// 在 master 进程上开启 rpc 服务
+	// 在 master 上开启 rpc 服务
 	m.startRPCServer()
 	return &m
 }
