@@ -10,22 +10,17 @@ import (
 )
 
 // Worker 结点用来注册到 Master 结点上的 RPC 方法
-func (m *Master) Register(args *RpcArgs, _ *RpcReply) error {
+func (m *Master) Register(args *RegisterArgs, _ *RpcReply) error {
 	m.Lock()
 	defer m.Unlock()
-	fmt.Printf("Register: worker %s\n", args.Worker)
-	m.workers = append(m.workers, args.Worker)
+	fmt.Printf("Register: worker %s\n", args.WorkerAddress)
+	m.workers = append(m.workers, args.WorkerAddress)
 	m.newCond.Broadcast()
 	return nil
 }
 
-// 关闭 rpc server 的 rpc 方法
-func (m *Master) Shutdown() {
-	close(m.shutdown)
-}
-
 //
-// 利用io等多路
+// 利用io多路
 //
 func (m *Master) startRPCServer() {
 	// 启动一个 rpc server
@@ -34,7 +29,7 @@ func (m *Master) startRPCServer() {
 	rpc.HandleHTTP()
 	// 或者也可以采用 tpc + 端口 形式
 	//l, e := net.Listen("tcp", ":1234")
-	sockname := masterSock()
+	sockname := MasterSock()
 	os.Remove(sockname)
 	l, e := net.Listen("unix", sockname)
 
@@ -46,7 +41,7 @@ func (m *Master) startRPCServer() {
 	go http.Serve(l, nil)
 
 	go func() {
-		<- m.shutdown
+		<-m.shutdown
 		l.Close()
 	}()
 }
@@ -54,9 +49,14 @@ func (m *Master) startRPCServer() {
 // 关闭 Master rpc server
 func (m *Master) stopRPCServer() {
 	var reply ShutdownReply
-	ok := call(m.address, "Master.Shutdown", new(struct{}), &reply)
+	ok := Call(m.address, "Master.Shutdown", new(struct{}), &reply)
 	if ok == false {
 		fmt.Printf("Cleanup: RPC %s error\n", m.address)
 	}
 	fmt.Println("Clean up Registration: done")
+}
+
+// 关闭 rpc server 的 rpc 方法
+func (m *Master) Shutdown() {
+	close(m.shutdown)
 }

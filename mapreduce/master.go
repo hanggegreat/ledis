@@ -1,9 +1,14 @@
 package mr
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net"
+	"os"
 	"sync"
+	"sync/atomic"
 )
 
 // 保存所有 master 结点需要追踪的状态
@@ -30,6 +35,8 @@ type Master struct {
 	l net.Listener
 	// 用来统计执行结果
 	stats []int
+	nextMapTaskNo int32
+	nextReduceTaskNo int32
 }
 
 // Master 结构体的构造函数
@@ -59,7 +66,7 @@ func Distributed(
 		func(phase string) {
 			ch := make(chan string)
 			go mr.forwardRegistrations(ch)
-			schedule(mr.jobName, mr.files, mr.nReduce, phase, ch)
+			schedule(mr, mr.jobName, mr.files, mr.nReduce, phase, ch)
 		},
 		func() {
 			mr.stats = mr.killWorkers()
@@ -68,22 +75,40 @@ func Distributed(
 	return
 }
 
-func schedule(jobName string, mapFiles []string, nReduce int, phase string, registerChan chan string) {
+func schedule(mr *Master, jobName string, inputFiles []string, nReduce int, phase string, registerChan chan string) {
+	workerAddress := <- registerChan
 	// map/reduce 类型时表示有多少个 map/reduce 类型任务
 	var nTasks int
 	// map/reduce 类型时表示有多少个 reduce/map 类型任务
 	var nOther int
 	switch phase {
 	case mapPhase:
-		nTasks = len(mapFiles)
+		nTasks = len(inputFiles)
 		nOther = nReduce
+		mapTaskNo := int(atomic.AddInt32(&mr.nextMapTaskNo, 1))
+		rpcArgs := DoTaskArgs{
+			JobName: jobName,
+			File: inputFiles[mapTaskNo],
+			Phase: phase,
+			TaskNo: mapTaskNo,
+			NumOtherPhase: nOther,
+		}
+		Call(workerAddress, "Worker.DoTask", &rpcArgs, new(struct{}))
 	case reducePhase:
 		nTasks = nReduce
-		nOther = len(mapFiles)
+		nOther = len(inputFiles)
+		reduceTaskNo := int(atomic.AddInt32(&mr.nextReduceTaskNo, 1))
+		rpcArgs := DoTaskArgs{
+			JobName: jobName,
+			Phase: phase,
+			TaskNo: reduceTaskNo,
+			NumOtherPhase: nOther,
+		}
+		Call(workerAddress, "Worker.DoTask", &rpcArgs, new(struct{}))
 	}
 
-	fmt.Printf("Schedule: %v %v tasks (%d I/Os)\n", nTasks, phase, nOther)
-	fmt.Printf("Schedule: %v done\n", phase)
+	log.Printf("Schedule: %v %v tasks (%d I/Os)\n", nTasks, phase, nOther)
+	log.Printf("Schedule: %v done\n", phase)
 }
 
 func (m *Master) run(
@@ -97,14 +122,14 @@ func (m *Master) run(
 	m.files = files
 	m.nReduce = nReduce
 
-	fmt.Printf("%s: Starting Map/Reduce task %s\n", m.address, m.jobName)
+	log.Printf("%s: Starting Map/Reduce task %s\n", m.address, m.jobName)
 
 	schedule(mapPhase)
 	schedule(reducePhase)
 	finish()
 	m.merge()
 
-	fmt.Printf("%s: Map/Reduce task completed\n", m.address)
+	log.Printf("%s: Map/Reduce task completed\n", m.address)
 
 	m.doneChannel <- true
 }
@@ -128,42 +153,60 @@ func (m *Master) killWorkers() []int {
 	res := make([]int, len(m.workers) * 2)
 	for _, worker := range m.workers {
 		var reply ShutdownReply
-		call(worker, "Worker.Shutdown", new(struct{}), &reply)
-		res = append(res, reply.nTasks)
+		Call(worker, "WorkerAddress.Shutdown", new(struct{}), &reply)
+		res = append(res, reply.NTasks)
 	}
 	return res
 }
 
 func (m *Master) merge() {
+	files := make([]*os.File, m.nReduce)
+	decoders := make([]*json.Decoder, m.nReduce)
+	for i := 0; i < m.nReduce; i++ {
+		file, err := os.Open(mergeFileName(m.jobName, i))
+		if err != nil {
+			log.Fatal("open file failed", err)
+		}
 
-}
+		decoder := json.NewDecoder(file)
+		files[i] = file
+		decoders[i] = decoder
+	}
 
-//
-// 一个用来计算 +1 的 RPC 方法
-//
-func (m *Master) RpcAddOne(args *RpcArgs, reply *RpcReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
+	outputFile, err := os.Create("lollipop-mrtmp." + m.jobName)
+	if err != nil {
+		log.Fatal("Merge: create file error ", err)
+	}
 
-//
-// 返回该 worker 结点上是否所有任务都已经执行完成
-//
-func (m *Master) Done() bool {
-	ret := false
+	writer := bufio.NewWriter(outputFile)
+	defer outputFile.Close()
+	defer writer.Flush()
 
-	ret = true
+	kvMap := make(map[*KeyValue]*json.Decoder, m.nReduce)
+	var kvHeap keyValues
+	for i := 0; i < m.nReduce; i++ {
+		kv := new(KeyValue)
+		err:= decoders[i].Decode(kv)
+		if err != nil {
+			log.Println("json decode error ", err)
+		} else {
+			kvMap[kv] = decoders[i]
+			kvHeap.Push(kv)
+		}
+	}
 
-	return ret
-}
+	for kvHeap.Len() != 0 {
+		kv := kvHeap.Pop().(*KeyValue)
+		fmt.Fprintf(writer, "%v: %v\n", kv.Key, kv.Value)
+		err := kvMap[kv].Decode(kv)
+		if err != nil {
+			log.Println("json decode error ", err)
+		} else {
+			kvHeap.Push(kv)
+		}
+	}
 
-//
-// 创建一个 Master 并返回， files 是输入文件， nReduce 是 reduce worker 的数量
-//
-func MakeMaster(files []string, nReduce int) *Master {
-	m := Master{}
-
-	// 在 master 上开启 rpc 服务
-	m.startRPCServer()
-	return &m
+	for _, file := range files {
+		file.Close()
+	}
 }

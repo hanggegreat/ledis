@@ -1,67 +1,95 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
+import (
+	"fmt"
+	"log"
+	"net"
+	"sync"
+	"time"
+)
 
-//
-// 用来封装mapreduce单个数据的结构体
-//
-type KeyValue struct {
-	Key   string
-	Value string
+type Worker struct {
+	// 用于同步
+	sync.Mutex
+	// worker 节点地址
+	address string
+	// mapFunc
+	MapFunc func(string, string) []KeyValue
+	// reduceFunc
+	ReduceFunc func(string, []string) string
+	// 还能执行 nRPC 个 rpc 方法
+	nRPC int
+	// 一共执行了多少个任务
+	nTasks int
+	// 当前并发执行的任务个数
+	concurrent int
+	// 只能并发执行这么多个任务
+	nConcurrent int
+	// tcp listener
+	l net.Listener
+	// 用来记录 worker 结点上的并发执行情况
+	parallelism *Parallelism
 }
 
-//
-// hash算法，用来将key hash到 n 个 reduce 上
-//
-func ihash(key string) int {
-	h := fnv.New32a()
-	h.Write([]byte(key))
-	return int(h.Sum32() & 0x7fffffff)
+func StartWorker(masterAddress, address string, nRpc int, max int) *Worker {
+	w := new(Worker)
+	w.address = address
+	w.MapFunc = mapFunc
+	w.ReduceFunc = reduceFunc
+	w.nRPC = nRpc
+	w.parallelism = &Parallelism{Max: max}
+	w.Run(masterAddress)
+	return w
 }
 
-//
-// mapf 就是 map worker 具体执行的方法
-// reducef 就是 reduce worker 具体执行的方法
-//
-func Worker(
-	mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string,
-) {
-	CallDemo()
-}
+func (wk *Worker) DoTask(arg *DoTaskArgs, _ *struct{}) error {
+	fmt.Printf("%s: given %v task #%d on file %s (nios: %d)\n", wk.address, arg.Phase, arg.TaskNo, arg.File, arg.NumOtherPhase)
 
-//
-// RPC 调用
-//
-func CallDemo() {
-	args := RpcArgs{X: 99}
-	reply := RpcReply{}
+	wk.Lock()
+	wk.nTasks += 1
+	wk.concurrent += 1
+	nc := wk.concurrent
+	wk.Unlock()
 
-	// 调用 Master 上的 RpcAddOne 方法，返回的 reply->y = args->x + 1
-	call(masterSock(), "Master.RpcAddOne", &args, &reply)
-	fmt.Printf("reply.Y %v\n", reply.Y)
-}
-
-//
-// rpc 调用 并阻塞等待返回结果
-//
-func call(masterAddress, rpcName string, args interface{}, reply interface{}) bool {
-	// 创建一个 rpc client
-	c, err := rpc.DialHTTP("unix", masterAddress)
-	if err != nil {
-		log.Fatal("dialing:", err)
-	}
-	defer c.Close()
-
-	// rpc 调用
-	err = c.Call(rpcName, args, reply)
-	if err == nil {
-		return true
+	if nc > wk.nConcurrent {
+		log.Fatal("workerAddress.DoTask: more than one DoTask sent concurrently to a single worker\n")
 	}
 
-	fmt.Println(err)
-	return false
+	pause := false
+	if wk.parallelism != nil {
+		wk.parallelism.mu.Lock()
+		wk.parallelism.Now += 1
+		if wk.parallelism.Now > wk.parallelism.Max {
+			wk.parallelism.Max = wk.parallelism.Now
+		}
+		if wk.parallelism.Max < 2 {
+			pause = true
+		}
+		wk.parallelism.mu.Unlock()
+	}
+
+	if pause {
+		// 睡一秒钟，给个机会证明一下可以并发执行多个任务的。。
+		time.Sleep(time.Second)
+	}
+
+	switch arg.Phase {
+	case mapPhase:
+		doMap(arg.JobName, arg.TaskNo, arg.File, arg.NumOtherPhase, wk.MapFunc)
+	case reducePhase:
+		doReduce(arg.JobName, arg.TaskNo, mergeFileName(arg.JobName, arg.TaskNo), arg.NumOtherPhase, wk.ReduceFunc)
+	}
+
+	wk.Lock()
+	wk.concurrent -= 1
+	wk.Unlock()
+
+	if wk.parallelism != nil {
+		wk.parallelism.mu.Lock()
+		wk.parallelism.Now -= 1
+		wk.parallelism.mu.Unlock()
+	}
+
+	fmt.Printf("%s: %v task #%d done\n", wk.address, arg.Phase, arg.TaskNo)
+	return nil
 }
