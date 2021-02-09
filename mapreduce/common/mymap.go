@@ -1,4 +1,4 @@
-package mr
+package common
 
 import (
 	"fmt"
@@ -15,11 +15,11 @@ import (
 // 首先读取输入文件 inFile，并将文件名和文件内容传入 mapFunc 来执行 map 任务
 // mapFunc 对输入内容进行运算并返回一个 KeyValue 切片结果
 // doMap 再将 KeyValue 切片数据 hash 到 nReduce 个文件中，输出文件名使用 reduceFileName(jobName, mapTaskNo, reduceTaskNo) 函数生成
-func doMap(
+func DoMap(
 	jobName string,
-	mapTaskNo int,
+	mapTaskNo int32,
 	inputFilename string,
-	nReduce int,
+	nReduce int32,
 	mapFunc func(filename string, content string) []KeyValue,
 ) {
 
@@ -39,7 +39,7 @@ func doMap(
 	files := make([]*os.File, nReduce)
 
 	for i := 0; i < len(files); i++ {
-		tempFile, e := os.Create(reduceFileName(jobName, mapTaskNo, nReduce))
+		tempFile, e := os.Create(ReduceFileName(jobName, mapTaskNo, nReduce))
 		if e != nil {
 			log.Fatal("Create reduce failed", err)
 		}
@@ -55,7 +55,7 @@ func doMap(
 	}
 }
 
-func mapFunc(filename string, content string) (res []KeyValue) {
+func MapFunc(filename string, content string) (res []KeyValue) {
 	words := strings.FieldsFunc(content, func(r rune) bool { return !unicode.IsLetter(r) })
 	dict := make(map[string]int)
 

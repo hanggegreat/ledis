@@ -1,4 +1,4 @@
-package mr
+package common
 
 import (
 	"bufio"
@@ -14,16 +14,16 @@ import (
 // 首先根据 reduceTaskNo 和 nMaps 找到 nMaps 个文件读入排序并合并
 // 将合并后的每个key 和 value 传入 reduceFunc 计算并返回结果
 // 最后将 reduceFunc 输出到 outFilename 对应的文件中
-func doReduce(
+func DoReduce(
 	jobName string,
-	reduceTaskNo int,
+	reduceTaskNo int32,
 	outFilename string,
-	nMaps int,
+	nMaps int32,
 	reduceFunc func(key string, values []string) string,
 ) {
 	kvs := make([]KeyValue, 10)
-	for i := 0; i < nMaps; i++ {
-		file, err := os.Open(reduceFileName(jobName, i, reduceTaskNo))
+	for i := int32(0); i < nMaps; i++ {
+		file, err := os.Open(ReduceFileName(jobName, i, reduceTaskNo))
 		if err != nil {
 			log.Fatal("Open file failed", err)
 		}
@@ -40,7 +40,7 @@ func doReduce(
 		file.Close()
 	}
 
-	kKvs := keyValues(kvs)
+	kKvs := KeyValueHeap(kvs)
 	sort.Sort(kKvs)
 
 	if len(kKvs) == 0 {
@@ -74,7 +74,7 @@ func doReduce(
 	}
 }
 
-func reduceFunc(key string, values []string) string {
+func ReduceFunc(key string, values []string) string {
 	count := 0
 	for _, value := range values {
 		val, err := strconv.Atoi(value)
