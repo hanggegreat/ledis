@@ -24,7 +24,7 @@ type KeyValue struct {
 
 // 用来记录 worker 节点的并发数据
 type Parallelism struct {
-	Mu sync.Mutex
+	sync.Mutex
 	// 当前有多少任务并发执行
 	Now int32
 	// worker 节点上最高并发执行的任务数
@@ -39,7 +39,7 @@ func MergeFileName(jobName string, reduceTaskNo int32) string {
 	return "lollipop-mrtmp." + jobName + "-res-" + strconv.Itoa(int(reduceTaskNo))
 }
 
-func CallMaster(address string, methodName string, args ...interface{}) (reflect.Value, error) {
+func CallMaster(address string, methodName string, arg interface{}) (v reflect.Value, e error) {
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -50,11 +50,16 @@ func CallMaster(address string, methodName string, args ...interface{}) (reflect
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	results := callReflect(c, methodName, ctx, args)
-	return results[0], results[1].Interface().(error)
+	results := callReflect(c, methodName, ctx, arg)
+	if results[1].Interface() == nil {
+		e = nil
+	} else {
+		e = results[1].Interface().(error)
+	}
+	return results[0], e
 }
 
-func CallWorker(address string, methodName string, args ...interface{}) (reflect.Value, error) {
+func CallWorker(address string, methodName string, arg interface{}) (v reflect.Value, e error) {
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -65,15 +70,17 @@ func CallWorker(address string, methodName string, args ...interface{}) (reflect
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	results := callReflect(c, methodName, ctx, args)
-	return results[0], results[1].Interface().(error)
+	results := callReflect(c, methodName, ctx, arg)
+	if results[1].Interface() == nil {
+		e = nil
+	} else {
+		e = results[1].Interface().(error)
+	}
+	return results[0], e
 }
 
-func callReflect(any interface{}, name string, args ...interface{}) []reflect.Value {
-	inputs := make([]reflect.Value, len(args))
-	for i, _ := range args {
-		inputs[i] = reflect.ValueOf(args[i])
-	}
+func callReflect(any interface{}, name string, context context.Context, arg interface{}) []reflect.Value {
+	inputs := []reflect.Value {reflect.ValueOf(context), reflect.ValueOf(arg)}
 
 	if v := reflect.ValueOf(any).MethodByName(name); v.String() == "<invalid Value>" {
 		return nil

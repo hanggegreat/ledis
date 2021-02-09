@@ -8,39 +8,13 @@ import (
 	"google.golang.org/grpc"
 	"log"
 	"net"
-	"sync"
 	"time"
 )
 
-type Worker struct {
-	pb.UnimplementedWorkerServer
-	// 用于同步
-	sync.Mutex
-	// worker 节点地址
-	address string
-	// mapFunc
-	MapFunc func(string, string) []common.KeyValue
-	// reduceFunc
-	ReduceFunc func(string, []string) string
-	// 还能执行 nRPC 个 rpc 方法
-	nRPC int32
-	// 一共执行了多少个任务
-	nTasks int32
-	// 当前并发执行的任务个数
-	concurrent int32
-	// 只能并发执行这么多个任务
-	nConcurrent int32
-	// tcp listener
-	l net.Listener
-	// 用来记录 worker 结点上的并发执行情况
-	parallelism *common.Parallelism
-	doTaskChan  chan bool
-}
-
 // 注册到 master 的方法，执行 rpc 调用
 func (w *Worker) Register(masterAddress string) {
-	registerArgs := pb.RegisterRequest{Address: w.address}
-	_, err := common.CallMaster(masterAddress, "Register", &registerArgs, new(struct{}))
+	registerRequest := pb.RegisterRequest{Address: w.address}
+	_, err := common.CallMaster(masterAddress, "Register", &registerRequest)
 	if err != nil {
 		log.Fatalf("Register: RPC %s register error\n", masterAddress)
 	} else {
@@ -51,12 +25,12 @@ func (w *Worker) Register(masterAddress string) {
 // Rpc 方法，用来关闭 worker 结点的方法
 func (w *Worker) Shutdown(ctx context.Context, request *empty.Empty) (reply *pb.ShutdownReply, err error) {
 	reply = &pb.ShutdownReply{}
-	w.Mutex.Lock()
-	defer w.Mutex.Unlock()
+	w.Lock()
+	defer w.Unlock()
 	reply.NTasks = w.nTasks
 	w.nRPC = 1
 	w.doTaskChan <- true
-	return reply, err
+	return reply, nil
 }
 
 // Rpc 方法，用来分配任务给 worker
@@ -76,7 +50,7 @@ func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *
 
 	pause := false
 	if w.parallelism != nil {
-		w.parallelism.Mu.Lock()
+		w.parallelism.Lock()
 		w.parallelism.Now += 1
 		if w.parallelism.Now > w.parallelism.Max {
 			w.parallelism.Max = w.parallelism.Now
@@ -84,7 +58,7 @@ func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *
 		if w.parallelism.Max < 2 {
 			pause = true
 		}
-		w.parallelism.Mu.Unlock()
+		w.parallelism.Unlock()
 	}
 
 	if pause {
@@ -104,9 +78,9 @@ func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *
 	w.Unlock()
 
 	if w.parallelism != nil {
-		w.parallelism.Mu.Lock()
+		w.parallelism.Lock()
 		w.parallelism.Now -= 1
-		w.parallelism.Mu.Unlock()
+		w.parallelism.Unlock()
 	}
 
 	log.Printf("%s: %v task #%d done\n", w.address, request.Phase, request.TaskNo)
@@ -114,15 +88,18 @@ func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *
 }
 
 func (w *Worker) StartRpcServer() {
-	lis, err := net.Listen("tcp", w.address)
+	l, err := net.Listen("tcp", w.address)
+	w.l = l
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
 	pb.RegisterWorkerServer(s, w)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+	go func() {
+		if err := s.Serve(l); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
 }
 
 // 启动一个 worker 结点，同时启动 rpc server
@@ -138,6 +115,7 @@ func (w *Worker) Run() {
 		if w.nRPC == 0 {
 			break
 		}
+		w.Unlock()
 	}
 
 	log.Printf("RunWorker %s exit\n", w.address)
