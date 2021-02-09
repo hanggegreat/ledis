@@ -38,6 +38,8 @@ func StartWorker(masterAddress, address string, nRpc int32, max int32) *Worker {
 	w.MapFunc = common.MapFunc
 	w.ReduceFunc = common.ReduceFunc
 	w.nRPC = nRpc
+	w.doTaskChan = make(chan bool, 10)
+	w.nConcurrent = max
 	w.parallelism = &common.Parallelism{Max: max}
 	go w.Run()
 	w.Register(masterAddress)

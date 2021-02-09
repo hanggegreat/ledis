@@ -12,14 +12,15 @@ const masterAddress = ":1111"
 var workerAddresses = []string{":2222", ":3333", ":4444", ":5555", ":6666", ":7777"}
 
 func main() {
-	fileCount := 1
-	files := make([]string, fileCount)
+	fileCount := 2
+	files := make([]string, 0)
 	for i := 0; i < fileCount; i++ {
-		files[i] = fmt.Sprintf("/Users/zhangyuanhang/go/src/com/lollipop/distributed-project/files/input-%v", i)
+		files = append(files, fmt.Sprintf("/Users/zhangyuanhang/go/src/distributed-project/files/input-%v", i))
 	}
-	m := master.Distributed(jobName, files, 3, masterAddress)
+	m := master.Distributed(jobName, files, 2, masterAddress)
 	worker.StartWorker(m.Address, workerAddresses[0], 5, 3)
-	//worker.StartWorker(masterAddress, m.Address, 5, 3)
+	worker.StartWorker(m.Address, workerAddresses[1], 5, 3)
+	//worker.StartWorker(m.Address, workerAddresses[1], 8, 3)
 	//worker.StartWorker(masterAddress, m.Address, 5, 3)
 	m.Wait()
 }

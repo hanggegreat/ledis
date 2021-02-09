@@ -26,10 +26,13 @@ func (w *Worker) Register(masterAddress string) {
 func (w *Worker) Shutdown(ctx context.Context, request *empty.Empty) (reply *pb.ShutdownReply, err error) {
 	reply = &pb.ShutdownReply{}
 	w.Lock()
-	defer w.Unlock()
 	reply.NTasks = w.nTasks
+	if w.nRPC == 0 {
+		return reply, nil
+	}
 	w.nRPC = 1
 	w.doTaskChan <- true
+	w.Unlock()
 	return reply, nil
 }
 
@@ -84,7 +87,7 @@ func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *
 	}
 
 	log.Printf("%s: %v task #%d done\n", w.address, request.Phase, request.TaskNo)
-	return reply, err
+	return &empty.Empty{}, nil
 }
 
 func (w *Worker) StartRpcServer() {
@@ -113,6 +116,7 @@ func (w *Worker) Run() {
 		w.Lock()
 		w.nRPC--
 		if w.nRPC == 0 {
+			w.Unlock()
 			break
 		}
 		w.Unlock()

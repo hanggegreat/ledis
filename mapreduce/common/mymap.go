@@ -1,7 +1,7 @@
 package common
 
 import (
-	"fmt"
+	"encoding/json"
 	"hash/fnv"
 	"io/ioutil"
 	"log"
@@ -36,18 +36,21 @@ func DoMap(
 
 	kvs := mapFunc(inputFilename, string(content))
 
-	files := make([]*os.File, nReduce)
+	files := make([]*os.File, 0)
 
-	for i := 0; i < len(files); i++ {
-		tempFile, e := os.Create(ReduceFileName(jobName, mapTaskNo, nReduce))
+	for i := int32(0); i < nReduce; i++ {
+		tempFile, e := os.Create(ReduceFileName(jobName, mapTaskNo, i))
 		if e != nil {
 			log.Fatal("Create reduce failed", err)
 		}
-		files[i] = tempFile
+		files = append(files, tempFile)
 	}
 
 	for i := 0; i < len(kvs); i++ {
-		fmt.Fprintf(files[i], "%v %v\n", kvs[i].Key, kvs[i].Value)
+		index := IHash(kvs[i].Key) % len(files)
+		encoder := json.NewEncoder(files[index])
+		encoder.Encode(kvs[i])
+		//fmt.Fprintf(files[IHash(kvs[i].Key) % len(files)], "%v %v\n", kvs[i].Key, kvs[i].Value)
 	}
 
 	for _, file := range files {

@@ -21,11 +21,11 @@ func DoReduce(
 	nMaps int32,
 	reduceFunc func(key string, values []string) string,
 ) {
-	kvs := make([]KeyValue, 10)
+	kvs := make([]KeyValue, 0)
 	for i := int32(0); i < nMaps; i++ {
 		file, err := os.Open(ReduceFileName(jobName, i, reduceTaskNo))
 		if err != nil {
-			log.Fatal("Open file failed", err)
+			log.Fatal("Open file failed: ", err)
 		}
 
 		decoder := json.NewDecoder(file)
@@ -35,15 +35,15 @@ func DoReduce(
 			if err != nil {
 				break
 			}
+
 			kvs = append(kvs, *kv)
 		}
-		file.Close()
 	}
 
-	kKvs := KeyValueHeap(kvs)
-	sort.Sort(kKvs)
+	kvHeap := KeyValueHeap(kvs)
+	sort.Sort(kvHeap)
 
-	if len(kKvs) == 0 {
+	if len(kvHeap) == 0 {
 		return
 	}
 
@@ -55,22 +55,18 @@ func DoReduce(
 	writer := bufio.NewWriter(outputFile)
 	defer outputFile.Close()
 	defer writer.Flush()
-
-	key := ""
-	values := make([]string, 10)
-	for i := 0; i <= len(kKvs); i++ {
-		if key == kKvs[i].Key {
-			values = append(values, kKvs[i].Value)
-			continue
-		} else if i < len(kKvs) {
-			fmt.Fprintf(writer, "%v: %v\n", key, reduceFunc(key, values))
+	values := make([]string, 0)
+	values = append(values, kvHeap[0].Value)
+	for i := 1; i < len(kvHeap); i++ {
+		if kvHeap[i].Key != kvHeap[i - 1].Key {
+			fmt.Fprintf(writer, "%v: %v\n", kvHeap[i - 1].Key, reduceFunc(kvHeap[i - 1].Key, values))
 			values = values[0:0]
-			key = ""
-		} else {
-			if key != "" {
-				fmt.Fprintf(writer, "%v: %v\n", key, reduceFunc(key, values))
-			}
 		}
+		values = append(values, kvHeap[i].Value)
+	}
+
+	if len(values) > 0 {
+		fmt.Fprintf(writer, "%v: %v\n", kvHeap[len(kvHeap) - 1].Key, reduceFunc(kvHeap[len(kvHeap) - 1].Key, values))
 	}
 }
 
@@ -79,7 +75,7 @@ func ReduceFunc(key string, values []string) string {
 	for _, value := range values {
 		val, err := strconv.Atoi(value)
 		if err != nil {
-			log.Fatal("atoi failed", err)
+			log.Fatalf("Atoi failed, value: %v, err: %v", value, err)
 		}
 		count += val
 	}

@@ -18,6 +18,7 @@ import (
 type Master struct {
 	pb.UnimplementedMasterServer
 	sync.Mutex
+	Wg *sync.WaitGroup
 	// master 的地址
 	Address string
 	// 在执行完 job 时，主线程从 doneChannel 阻塞中解除
@@ -33,7 +34,7 @@ type Master struct {
 	// reduce 节点数
 	nReduce int32
 	// 写入数据用来终结 rpc server，从而结束 rpc server 线程
-	shutdown chan struct{}
+	shutdown chan bool
 	// rpc listener
 	l net.Listener
 	// 用来统计执行结果
@@ -48,11 +49,12 @@ func newMaster(master string) (mr *Master) {
 	// 地址使用传进来的
 	mr.Address = master
 	// 写入数据用来终结 rpc server，从而结束 rpc server 线程
-	mr.shutdown = make(chan struct{})
+	mr.shutdown = make(chan bool)
 	// 用来进行线程 wait/notify 操作
 	mr.newCond = sync.NewCond(mr)
 	// 在执行完 job 时，主线程从 doneChannel 阻塞中解除
 	mr.doneChannel = make(chan bool)
+	mr.Wg = new(sync.WaitGroup)
 	return
 }
 
@@ -64,6 +66,7 @@ func Distributed(
 	master string,
 ) (m *Master) {
 	m = newMaster(master)
+	m.Wg.Add(len(files))
 	m.StartRpcServer(master)
 	go m.run(jobName, files, nReduce,
 		func(phase string) {
@@ -98,6 +101,7 @@ func schedule(mr *Master, jobName string, inputFiles []string, nReduce int32, ph
 		}
 		atomic.AddInt32(&mr.nextMapTaskNo, 1)
 		common.CallWorker(workerAddress, "DoTask", &rpcRequest)
+		mr.Wg.Done()
 	case common.ReducePhase:
 		nTasks = nReduce
 		nOther = int32(len(inputFiles))
@@ -129,8 +133,16 @@ func (m *Master) run(
 
 	log.Printf("%s: Starting Map/Reduce task %s\n", m.Address, m.jobName)
 
-	schedule(common.MapPhase)
-	schedule(common.ReducePhase)
+	for i := 0; i < len(files); i++ {
+		schedule(common.MapPhase)
+	}
+
+	m.Wg.Wait()
+
+	for i := int32(0); i < nReduce; i++ {
+		schedule(common.ReducePhase)
+	}
+
 	finish()
 	m.merge()
 
@@ -155,7 +167,7 @@ func (m *Master) forwardRegistrations(ch chan string) {
 }
 
 func (m *Master) killWorkers() []int32 {
-	res := make([]int32, len(m.workers)*2)
+	res := make([]int32, 0)
 	for _, worker := range m.workers {
 		calReply, err := common.CallWorker(worker, "Shutdown", &empty.Empty{})
 		if err != nil {
@@ -168,8 +180,8 @@ func (m *Master) killWorkers() []int32 {
 }
 
 func (m *Master) merge() {
-	files := make([]*os.File, m.nReduce)
-	decoders := make([]*json.Decoder, m.nReduce)
+	files := make([]*os.File, 0)
+	decoders := make([]*json.Decoder, 0)
 	for i := int32(0); i < m.nReduce; i++ {
 		file, err := os.Open(common.MergeFileName(m.jobName, i))
 		if err != nil {
@@ -177,8 +189,8 @@ func (m *Master) merge() {
 		}
 
 		decoder := json.NewDecoder(file)
-		files[i] = file
-		decoders[i] = decoder
+		files = append(files, file)
+		decoders = append(decoders, decoder)
 	}
 
 	outputFile, err := os.Create("lollipop-mrtmp." + m.jobName)
@@ -190,7 +202,7 @@ func (m *Master) merge() {
 	defer outputFile.Close()
 	defer writer.Flush()
 
-	kvMap := make(map[*common.KeyValue]*json.Decoder, m.nReduce)
+	kvMap := make(map[*common.KeyValue]*json.Decoder)
 	var kvHeap common.KeyValueHeap
 	for i := int32(0); i < m.nReduce; i++ {
 		kv := new(common.KeyValue)
