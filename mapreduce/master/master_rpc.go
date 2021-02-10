@@ -23,7 +23,7 @@ func (m *Master) Shutdown(ctx context.Context, request *empty.Empty) (reply *emp
 	log.Printf("Shutdown: registration server\n")
 	close(m.shutdown)
 	m.l.Close()
-	return reply, err
+	return &empty.Empty{}, err
 }
 
 func (m *Master) StartRpcServer(port string) {
@@ -36,7 +36,7 @@ func (m *Master) StartRpcServer(port string) {
 	pb.RegisterMasterServer(s, m)
 	go func() {
 		if err := s.Serve(l); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			log.Printf("failed to serve: %v", err)
 		}
 	}()
 }

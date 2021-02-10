@@ -22,27 +22,12 @@ func (w *Worker) Register(masterAddress string) {
 	}
 }
 
-// Rpc 方法，用来关闭 worker 结点的方法
-func (w *Worker) Shutdown(ctx context.Context, request *empty.Empty) (reply *pb.ShutdownReply, err error) {
-	reply = &pb.ShutdownReply{}
-	w.Lock()
-	reply.NTasks = w.nTasks
-	if w.nRPC == 0 {
-		return reply, nil
-	}
-	w.nRPC = 1
-	w.doTaskChan <- true
-	w.Unlock()
-	return reply, nil
-}
-
 // Rpc 方法，用来分配任务给 worker
 func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *empty.Empty, err error) {
 	log.Printf("%s: given %v task #%d on file %s (nios: %d)\n", w.address, request.Phase, request.TaskNo, request.Filename, request.NumOtherPhase)
 
 	w.Lock()
 	w.nTasks += 1
-	w.doTaskChan <- true
 	w.concurrent += 1
 	nc := w.concurrent
 	w.Unlock()
@@ -90,6 +75,16 @@ func (w *Worker) DoTask(ctx context.Context, request *pb.DoTaskRequest) (reply *
 	return &empty.Empty{}, nil
 }
 
+// Rpc 方法，用来关闭 worker 结点的方法
+func (w *Worker) Shutdown(ctx context.Context, request *empty.Empty) (reply *pb.ShutdownReply, err error) {
+	reply = &pb.ShutdownReply{}
+	w.Lock()
+	reply.NTasks = w.nTasks
+	w.doneChan <- true
+	w.Unlock()
+	return reply, nil
+}
+
 func (w *Worker) StartRpcServer() {
 	l, err := net.Listen("tcp", w.address)
 	w.l = l
@@ -100,27 +95,7 @@ func (w *Worker) StartRpcServer() {
 	pb.RegisterWorkerServer(s, w)
 	go func() {
 		if err := s.Serve(l); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			log.Printf("failed to serve: %v", err)
 		}
 	}()
-}
-
-// 启动一个 worker 结点，同时启动 rpc server
-func (w *Worker) Run() {
-	// 启动一个 rpc server
-	w.StartRpcServer()
-	defer w.l.Close()
-
-	for {
-		<-w.doTaskChan
-		w.Lock()
-		w.nRPC--
-		if w.nRPC == 0 {
-			w.Unlock()
-			break
-		}
-		w.Unlock()
-	}
-
-	log.Printf("RunWorker %s exit\n", w.address)
 }

@@ -1,9 +1,7 @@
 package common
 
 import (
-	"bufio"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"sort"
@@ -40,7 +38,7 @@ func DoReduce(
 		}
 	}
 
-	kvHeap := KeyValueHeap(kvs)
+	kvHeap := KeyValues(kvs)
 	sort.Sort(kvHeap)
 
 	if len(kvHeap) == 0 {
@@ -52,21 +50,20 @@ func DoReduce(
 		log.Fatal("Create file failed", err)
 	}
 
-	writer := bufio.NewWriter(outputFile)
+	encoder := json.NewEncoder(outputFile)
 	defer outputFile.Close()
-	defer writer.Flush()
 	values := make([]string, 0)
 	values = append(values, kvHeap[0].Value)
 	for i := 1; i < len(kvHeap); i++ {
 		if kvHeap[i].Key != kvHeap[i - 1].Key {
-			fmt.Fprintf(writer, "%v: %v\n", kvHeap[i - 1].Key, reduceFunc(kvHeap[i - 1].Key, values))
+			encoder.Encode(KeyValue{Key: kvHeap[i - 1].Key, Value: reduceFunc(kvHeap[i - 1].Key, values)})
 			values = values[0:0]
 		}
 		values = append(values, kvHeap[i].Value)
 	}
 
 	if len(values) > 0 {
-		fmt.Fprintf(writer, "%v: %v\n", kvHeap[len(kvHeap) - 1].Key, reduceFunc(kvHeap[len(kvHeap) - 1].Key, values))
+		encoder.Encode(KeyValue{Key: kvHeap[len(kvHeap) - 1].Key, Value: reduceFunc(kvHeap[len(kvHeap) - 1].Key, values)})
 	}
 }
 

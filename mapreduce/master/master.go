@@ -69,9 +69,7 @@ func Distributed(
 	m.Wg.Add(len(files))
 	m.StartRpcServer(master)
 	go m.run(jobName, files, nReduce,
-		func(phase string) {
-			ch := make(chan string)
-			go m.forwardRegistrations(ch)
+		func(phase string, ch chan string) {
 			schedule(m, m.jobName, m.files, m.nReduce, phase, ch)
 		},
 		func() {
@@ -100,7 +98,10 @@ func schedule(mr *Master, jobName string, inputFiles []string, nReduce int32, ph
 			NumOtherPhase: nOther,
 		}
 		atomic.AddInt32(&mr.nextMapTaskNo, 1)
-		common.CallWorker(workerAddress, "DoTask", &rpcRequest)
+		_, err := common.CallWorker(workerAddress, "DoTask", &rpcRequest)
+		if err != nil {
+			return
+		}
 		mr.Wg.Done()
 	case common.ReducePhase:
 		nTasks = nReduce
@@ -113,8 +114,14 @@ func schedule(mr *Master, jobName string, inputFiles []string, nReduce int32, ph
 			NumOtherPhase: nOther,
 		}
 		atomic.AddInt32(&mr.nextReduceTaskNo, 1)
-		common.CallWorker(workerAddress, "DoTask", &rpcRequest)
+		_, err := common.CallWorker(workerAddress, "DoTask", &rpcRequest)
+		if err != nil {
+			return
+		}
+		mr.Wg.Done()
 	}
+
+	registerChan <- workerAddress
 
 	log.Printf("Schedule: %v %v tasks (%d I/Os)\n", nTasks, phase, nOther)
 	log.Printf("Schedule: %v done\n", phase)
@@ -124,7 +131,7 @@ func (m *Master) run(
 	jobName string,
 	files []string,
 	nReduce int32,
-	schedule func(phase string),
+	schedule func(phase string, ch chan string),
 	finish func(),
 ) {
 	m.jobName = jobName
@@ -133,15 +140,25 @@ func (m *Master) run(
 
 	log.Printf("%s: Starting Map/Reduce task %s\n", m.Address, m.jobName)
 
+	ch := make(chan string, 20)
+	go m.forwardRegistrations(ch)
+
 	for i := 0; i < len(files); i++ {
-		schedule(common.MapPhase)
+		go func() {
+			schedule(common.MapPhase, ch)
+		}()
 	}
 
 	m.Wg.Wait()
+	m.Wg.Add(int(nReduce))
 
 	for i := int32(0); i < nReduce; i++ {
-		schedule(common.ReducePhase)
+		go func() {
+			schedule(common.ReducePhase, ch)
+		}()
 	}
+
+	m.Wg.Wait()
 
 	finish()
 	m.merge()
@@ -171,7 +188,7 @@ func (m *Master) killWorkers() []int32 {
 	for _, worker := range m.workers {
 		calReply, err := common.CallWorker(worker, "Shutdown", &empty.Empty{})
 		if err != nil {
-			log.Fatal("call worker shutdown function failed, err: ", err)
+			log.Println("call worker shutdown function failed, err: ", err)
 		}
 		reply := calReply.Interface().(*pb.ShutdownReply)
 		res = append(res, reply.NTasks)

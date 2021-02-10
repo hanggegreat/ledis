@@ -2,7 +2,7 @@ package common
 
 import "strings"
 
-type KeyValueHeap []KeyValue
+type KeyValueHeap []*KeyValue
 
 func (kvs KeyValueHeap) Less(i, j int) bool {
 	return strings.Compare(kvs[i].Key, kvs[j].Key) == -1
@@ -17,7 +17,7 @@ func (kvs KeyValueHeap) Swap(i, j int) {
 }
 
 func (kvs *KeyValueHeap) Push(x interface{}) {
-	*kvs = append(*kvs, x.(KeyValue))
+	*kvs = append(*kvs, x.(*KeyValue))
 }
 
 func (kvs *KeyValueHeap) Pop() interface{} {

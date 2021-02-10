@@ -18,9 +18,8 @@ func main() {
 		files = append(files, fmt.Sprintf("/Users/zhangyuanhang/go/src/distributed-project/files/input-%v", i))
 	}
 	m := master.Distributed(jobName, files, 2, masterAddress)
-	worker.StartWorker(m.Address, workerAddresses[0], 5, 3)
-	worker.StartWorker(m.Address, workerAddresses[1], 5, 3)
-	//worker.StartWorker(m.Address, workerAddresses[1], 8, 3)
-	//worker.StartWorker(masterAddress, m.Address, 5, 3)
+	worker.StartWorker(m.Address, workerAddresses[0], 3)
+	//worker.StartWorker(m.Address, workerAddresses[1], 3)
+	//worker.StartWorker(m.Address, workerAddresses[1], 3)
 	m.Wait()
 }
