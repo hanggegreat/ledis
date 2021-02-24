@@ -70,10 +70,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	if args.Term > rf.curTerm {
+		DPrintf("server %v old term: %v receive new term: %v", rf.me, rf.curTerm, args.Term)
 		rf.back2Follower(args.Term, VoteNil)
 	}
 
 	if rf.votedFor == VoteNil || rf.votedFor == args.CandidateID {
+		DPrintf("server %v vote for %v, new term: %v", rf.me, args.CandidateID, args.Term)
 		reply.VoteGranted = true
 		rf.back2Follower(args.Term, args.CandidateID)
 	}

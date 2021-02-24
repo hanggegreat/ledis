@@ -2,6 +2,7 @@ package raft
 
 import (
 	"distributed-project/labrpc"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	//"6.824/labgob"
@@ -43,6 +44,10 @@ func (rf *Raft) GetState() (int, bool) {
 
 func (rf *Raft) isLeader() bool {
 	return rf.state == Leader
+}
+
+func (rf *Raft) String() string {
+	return fmt.Sprintf("serverId: %d, term: %d, voteFor: %d, state: %d, dead: %d", rf.me, rf.curTerm, rf.votedFor, rf.state, rf.dead)
 }
 
 // 成为 Term 为 term，Leader 为 voteFor 的 Follower
