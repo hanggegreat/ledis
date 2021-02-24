@@ -1,119 +1,86 @@
 package raft
 
-//
-// this is an outline of the API that raft must expose to
-// the service (or tester). see comments below for
-// each of these functions for more details.
-//
-// rf = Make(...)
-//   create a new Raft server.
-// rf.Start(command interface{}) (index, term, isleader)
-//   start agreement on a new log entry
-// rf.GetState() (term, isLeader)
-//   ask a Raft for its current term, and whether it thinks it is leader
-// ApplyMsg
-//   each time a new entry is committed to the log, each Raft peer
-//   should send an ApplyMsg to the service (or tester)
-//   in the same server.
-//
-
 import (
 	"distributed-project/labrpc"
-	//	"bytes"
 	"sync"
 	"sync/atomic"
 	//"6.824/labgob"
 )
 
-//
-// as each Raft peer becomes aware that successive log entries are
-// committed, the peer should send an ApplyMsg to the service (or
-// tester) on the same server, via the applyCh passed to Make(). set
-// CommandValid to true to indicate that the ApplyMsg contains a newly
-// committed log entry.
-//
-// in part 2D you'll want to send other kinds of messages (e.g.,
-// snapshots) on the applyCh, but set CommandValid to false for these
-// other uses.
-//
-type ApplyMsg struct {
-	CommandValid bool
-	Command      interface{}
-	CommandIndex int
+type Raft struct {
+	// 通过锁来共享结点状态
+	mu *sync.Mutex
+	// 每个结点的 rpc end point
+	peers []*labrpc.ClientEnd
+	// 保存结点持久化状态的对象
+	persister *Persister
+	// 当前 peer 在 peers[] 中的 index
+	me int
+	// set by Kill()
+	dead int32
 
-	// For 2D:
-	SnapshotValid bool
-	Snapshot      []byte
-	SnapshotTerm  int
-	SnapshotIndex int
+	// current term
+	curTerm  int
+	votedFor int
+	// log entries; each entry contains command for state machine, and term when entry was received by leader(first index is 1)
+	logs []LogEntry
+
+	// 结点状态(Follower, Candidate, Leader)
+	state PeerState
+	// 选举超时器
+	timer *Timer
+	// every Raft peer has a condition, use for trigger AppendEntries RPC
+	syncConds []*sync.Cond
+
+	// Your data here (2A, 2B, 2C).
+	// Look at the paper's Figure 2 for a description of what
+	// state a Raft server must maintain.
 }
 
-// return currentTerm and whether this server
-// believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-
-	var term int
-	var isleader bool
-	// Your code here (2A).
-	return term, isleader
+	return rf.curTerm, rf.state == Leader
 }
 
-//
-// save Raft's persistent state to stable storage,
-// where it can later be retrieved after a crash and restart.
-// see paper's Figure 2 for a description of what should be persistent.
-//
-func (rf *Raft) persist() {
-	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+func (rf *Raft) isLeader() bool {
+	return rf.state == Leader
 }
 
-//
-// restore previously persisted state.
-//
-func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
-		return
+// 成为 Term 为 term，Leader 为 voteFor 的 Follower
+func (rf *Raft) back2Follower(term int, voteFor int) {
+	rf.mu.Lock()
+	rf.state = Follower
+	rf.curTerm = term
+	rf.votedFor = voteFor
+	rf.resetElectTimer()
+	rf.mu.Unlock()
+}
+
+// 创建并初始化 Raft
+func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan ApplyMsg) *Raft {
+	rf := &Raft{}
+	rf.mu = &sync.Mutex{}
+	rf.peers = peers
+	rf.persister = persister
+	rf.me = me
+
+	rf.curTerm = 0
+	rf.votedFor = VoteNil
+	rf.state = Follower
+	rf.timer = NewElectTimer()
+	rf.dead = 0
+	rf.logs = make([]LogEntry, 0)
+	rf.syncConds = make([]*sync.Cond, len(peers))
+	for i := range peers {
+		rf.syncConds[i] = sync.NewCond(rf.mu)
 	}
-	// Your code here (2C).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
-}
 
-//
-// A service wants to switch to snapshot.  Only do so if Raft hasn't
-// have more recent info since it communicate the snapshot on applyCh.
-//
-func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
 
-	// Your code here (2D).
+	// start ticker goroutine to start elections
+	go rf.ticker()
 
-	return true
-}
-
-// the service says it has created a snapshot that has
-// all info up to and including index. this means the
-// service no longer needs the log through (and including)
-// that index. Raft should now trim its log as much as possible.
-func (rf *Raft) Snapshot(index int, snapshot []byte) {
-	// Your code here (2D).
-
+	return rf
 }
 
 //
@@ -159,41 +126,4 @@ func (rf *Raft) Kill() {
 func (rf *Raft) killed() bool {
 	z := atomic.LoadInt32(&rf.dead)
 	return z == 1
-}
-
-//
-// the service or tester wants to create a Raft server. the ports
-// of all the Raft servers (including this one) are in peers[]. this
-// server's port is peers[me]. all the servers' peers[] arrays
-// have the same order. persister is a place for this server to
-// save its persistent state, and also initially holds the most
-// recent saved state, if any. applyCh is a channel on which the
-// tester or service expects Raft to send ApplyMsg messages.
-// Make() must return quickly, so it should start goroutines
-// for any long-running work.
-//
-func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan ApplyMsg) *Raft {
-	rf := &Raft{}
-	rf.peers = peers
-	rf.persister = persister
-	rf.me = me
-
-	rf.curTerm = 0
-	rf.votedFor = VoteNil
-	rf.state = Follower
-	rf.timer = NewElectTimer()
-	rf.dead = 0
-	rf.logs = make([]LogEntry, 0)
-	rf.syncConds = make([]*sync.Cond, len(peers))
-	for i := range peers {
-		rf.syncConds[i] = sync.NewCond(rf.mu)
-	}
-
-	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
-
-	// start ticker goroutine to start elections
-	go rf.ticker()
-
-	return rf
 }

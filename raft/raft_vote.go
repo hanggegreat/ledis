@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"distributed-project/labrpc"
 	"fmt"
 	"sync"
 	"time"
@@ -21,10 +20,14 @@ type RequestVoteReply struct {
 	VoteGranted bool
 }
 
+// 选举超时器
 type Timer struct {
-	t        *time.Timer
+	// 定时器
+	t *time.Timer
+	// 定时器间隔
 	duration time.Duration
-	genFunc  func() time.Duration
+	// 生成一个随机时间间隔的函数
+	genFunc func() time.Duration
 }
 
 func (timer *Timer) Stop() {
@@ -33,50 +36,26 @@ func (timer *Timer) Stop() {
 
 func (timer *Timer) Reset() {
 	timer.duration = timer.genFunc()
-	timer.t = time.NewTimer(timer.duration)
+	if timer.t == nil {
+		timer.t = time.NewTimer(timer.duration)
+	} else {
+		timer.t.Reset(timer.duration)
+	}
 }
 
 func (timer *Timer) String() string {
 	return fmt.Sprintf("RaftTimer(duration=%s)", timer.duration)
 }
 
+// 生成一个选举超时器
 func NewElectTimer() *Timer {
 	timer := &Timer{}
-	timer.genFunc = func() time.Duration {
-		return time.Duration(RandomRange(400, 800)) * time.Millisecond
-	}
+	timer.genFunc = genRandomRangeDuration
 	timer.Reset()
 	return timer
 }
 
-type Raft struct {
-	// 通过锁来共享结点状态
-	mu *sync.Mutex
-	// 每个结点的 rpc end point
-	peers []*labrpc.ClientEnd
-	// 保存结点持久化状态的对象
-	persister *Persister
-	// 当前 peer 在 peers[] 中的 index
-	me int
-	// set by Kill()
-	dead int32
-
-	// persistent states
-	curTerm  int
-	votedFor int
-	logs     []LogEntry // log entries; each entry contains command for state machine, and term when entry was received by leader(first index is 1)
-
-	// 结点状态(Follower, Candidate, Leader)
-	state PeerState
-	// 选举定时器
-	timer     *Timer
-	syncConds []*sync.Cond // every Raft peer has a condition, use for trigger AppendEntries RPC
-
-	// Your data here (2A, 2B, 2C).
-	// Look at the paper's Figure 2 for a description of what
-	// state a Raft server must maintain.
-}
-
+// 重置选举超时器
 func (rf *Raft) resetElectTimer() {
 	rf.timer.Reset()
 }
@@ -100,25 +79,19 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 }
 
+// 检查选举超时
 func (rf *Raft) ticker() {
 	for rf.killed() == false {
 		select {
+		// 选举超时，成为 Candidate，进行投票请求
 		case <-rf.timer.t.C:
 			rf.resetElectTimer()
-			rf.vote()
+			rf.voteForMe()
 		}
 	}
 }
 
-func (rf *Raft) back2Follower(term int, voteFor int) {
-	rf.mu.Lock()
-	rf.state = Follower
-	rf.curTerm = term
-	rf.votedFor = voteFor
-	rf.mu.Unlock()
-}
-
-func (rf *Raft) vote() {
+func (rf *Raft) voteForMe() {
 	DPrintf("Vote|Timeout|%v", rf)
 	rf.curTerm++
 	rf.state = Candidate
@@ -177,9 +150,8 @@ func (rf *Raft) vote() {
 
 		if votes >= majority {
 			rf.state = Leader
-			// TODO
-			//go rf.heartbeat()
-			//go rf.sync()
+			go rf.heartbeat()
+			go rf.sync()
 			DPrintf("Vote|Win|%v", rf)
 			return
 		}
@@ -187,10 +159,9 @@ func (rf *Raft) vote() {
 
 	DPrintf("Vote|Split|%v", rf)
 	rf.back2Follower(rf.curTerm, VoteNil)
-
 }
 
+// 请求投票给自己的 rpc 调用
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	return ok
+	return rf.peers[server].Call("Raft.RequestVote", args, reply)
 }
