@@ -69,10 +69,13 @@ func (rf *Raft) sync() {
 				case <-replyCh:
 				}
 
+				rf.mu.Lock()
 				if reply.Term > rf.curTerm {
 					rf.back2Follower(reply.Term, VoteNil)
+					rf.mu.Unlock()
 					return
 				}
+				rf.mu.Unlock()
 			}
 		}(i)
 	}
@@ -101,6 +104,8 @@ func (rf *Raft) heartbeat() {
 
 // 接收 Leader 心跳的 rpc 方法
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	reply.Term = rf.curTerm
 
 	if rf.curTerm > args.Term {

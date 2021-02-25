@@ -19,8 +19,8 @@ const (
 const RpcCallTimeout = time.Second
 const HeartbeatInterval = 100 * time.Millisecond
 
-const MinElectionDuration = 400
-const MaxElectionDuration = 800
+const MinElectionDuration = 1100
+const MaxElectionDuration = 1400
 
 // Debugging
 const Debug = true

@@ -51,13 +51,11 @@ func (rf *Raft) String() string {
 }
 
 // 成为 Term 为 term，Leader 为 voteFor 的 Follower
-func (rf *Raft) back2Follower(term int, voteFor int) {
-	rf.mu.Lock()
+func (rf *Raft) back2Follower(term, voteFor int) {
 	rf.state = Follower
 	rf.curTerm = term
 	rf.votedFor = voteFor
 	rf.resetElectTimer()
-	rf.mu.Unlock()
 }
 
 // 创建并初始化 Raft

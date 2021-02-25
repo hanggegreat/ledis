@@ -62,6 +62,8 @@ func (rf *Raft) resetElectTimer() {
 
 // 投票给 candidate 的 rpc 方法
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	reply.Term = rf.curTerm
 	reply.VoteGranted = false
 
@@ -70,12 +72,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	if args.Term > rf.curTerm {
-		DPrintf("server %v old term: %v receive new term: %v", rf.me, rf.curTerm, args.Term)
+		DPrintf("server %v change term, old term: %v, new term: %v", rf.me, rf.curTerm, args.Term)
 		rf.back2Follower(args.Term, VoteNil)
 	}
 
 	if rf.votedFor == VoteNil || rf.votedFor == args.CandidateID {
-		DPrintf("server %v vote for %v, new term: %v", rf.me, args.CandidateID, args.Term)
+		DPrintf("server %v vote for %v, new term: %v, old votedFor: %v", rf.me, args.CandidateID, args.Term, rf.votedFor)
 		reply.VoteGranted = true
 		rf.back2Follower(args.Term, args.CandidateID)
 	}
@@ -119,12 +121,13 @@ func (rf *Raft) voteForMe() {
 			reply := RequestVoteReply{}
 			respCh := make(chan struct{})
 			go func() {
-				rf.RequestVote(&args, &reply)
+				rf.sendRequestVote(serverId, &args, &reply)
 				respCh <- struct{}{}
 			}()
 
 			select {
 			case <-time.After(RpcCallTimeout):
+				DPrintf("serverId: %v send vote rpc call timeout, voteServerId: %v", rf.me, serverId)
 				return
 			case <-respCh:
 				replyCh <- &reply
@@ -140,14 +143,17 @@ func (rf *Raft) voteForMe() {
 	votes := 1
 	majority := len(rf.peers)/2 + 1
 	for reply := range replyCh {
+		rf.mu.Lock()
 		if reply.Term > rf.curTerm {
 			DPrintf("Vote|Higher Term:%d|%v", reply.Term, rf)
 			rf.back2Follower(reply.Term, VoteNil)
+			rf.mu.Unlock()
 			return
 		}
 
 		if reply.VoteGranted {
 			votes++
+			DPrintf("serverId: %v receive vote, current votes: %v", rf.me, votes)
 		}
 
 		if votes >= majority {
@@ -155,12 +161,16 @@ func (rf *Raft) voteForMe() {
 			go rf.heartbeat()
 			go rf.sync()
 			DPrintf("Vote|Win|%v", rf)
+			rf.mu.Unlock()
 			return
 		}
+		rf.mu.Unlock()
 	}
 
 	DPrintf("Vote|Split|%v", rf)
+	rf.mu.Lock()
 	rf.back2Follower(rf.curTerm, VoteNil)
+	rf.mu.Unlock()
 }
 
 // 请求投票给自己的 rpc 调用
