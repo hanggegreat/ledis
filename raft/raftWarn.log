@@ -1,9 +1,10 @@
-WarnRaft:2021/02/28 23:50:46 raft.go:131: Raft:4 term:1 | Follower convert role to Candidate!
-WarnRaft:2021/02/28 23:50:46 raft.go:127: Raft:2 term:1 | Follower convert role to Follower!
-WarnRaft:2021/02/28 23:50:46 election.go:53: Raft:2 term:1 | vote to candidate 4
-WarnRaft:2021/02/28 23:50:46 raft.go:127: Raft:1 term:1 | Follower convert role to Follower!
-WarnRaft:2021/02/28 23:50:46 election.go:53: Raft:1 term:1 | vote to candidate 4
-WarnRaft:2021/02/28 23:50:46 raft.go:131: Raft:3 term:1 | Follower convert role to Candidate!
+WarnRaft:2021/02/28 23:56:00 raft.go:130: Raft:2 term:1 | Follower convert role to Candidate!
+WarnRaft:2021/02/28 23:56:00 raft.go:126: Raft:1 term:1 | Follower convert role to Follower!
+WarnRaft:2021/02/28 23:56:00 raft.go:126: Raft:0 term:1 | Follower convert role to Follower!
+WarnRaft:2021/02/28 23:56:00 election.go:53: Raft:1 term:1 | vote to candidate 2
+WarnRaft:2021/02/28 23:56:00 election.go:53: Raft:0 term:1 | vote to candidate 2
+WarnRaft:2021/02/28 23:56:00 raft.go:132: Raft:2 term:1 | Candidate convert role to Leader!
+!
 WarnRaft:2021/02/28 23:50:46 raft.go:127: Raft:0 term:1 | Follower convert role to Follower!
 WarnRaft:2021/02/28 23:50:46 election.go:53: Raft:0 term:1 | vote to candidate 4
 WarnRaft:2021/02/28 23:50:46 raft.go:133: Raft:4 term:1 | Candidate convert role to Leader!

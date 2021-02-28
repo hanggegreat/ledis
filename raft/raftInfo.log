@@ -1,13 +1,13 @@
-InfoRaft:2021/02/28 23:50:45 raft.go:247: Create a new Raft:[0]! term:[0]! Log length:[0]
-InfoRaft:2021/02/28 23:50:45 raft.go:247: Create a new Raft:[1]! term:[0]! Log length:[0]
-InfoRaft:2021/02/28 23:50:45 raft.go:247: Create a new Raft:[2]! term:[0]! Log length:[0]
-InfoRaft:2021/02/28 23:50:45 raft.go:247: Create a new Raft:[3]! term:[0]! Log length:[0]
-InfoRaft:2021/02/28 23:50:45 raft.go:247: Create a new Raft:[4]! term:[0]! Log length:[0]
-InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:4 term:1 | Persist data! Size:   98 logs:   0
-InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:2 term:1 | Persist data! Size:   98 logs:   0
-InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:2 term:1 | Persist data! Size:   98 logs:   0
-InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:1 term:1 | Persist data! Size:   98 logs:   0
-InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:1 term:1 | Persist data! Size:   98 logs:   0
+InfoRaft:2021/02/28 23:56:00 raft.go:246: Create a new Raft:[0]! term:[0]! Log length:[0]
+InfoRaft:2021/02/28 23:56:00 raft.go:246: Create a new Raft:[1]! term:[0]! Log length:[0]
+InfoRaft:2021/02/28 23:56:00 raft.go:246: Create a new Raft:[2]! term:[0]! Log length:[0]
+InfoRaft:2021/02/28 23:56:00 raft.go:90: Raft:2 term:1 | Persist data! Size:   98 logs:   0
+InfoRaft:2021/02/28 23:56:00 raft.go:90: Raft:1 term:1 | Persist data! Size:   98 logs:   0
+InfoRaft:2021/02/28 23:56:00 raft.go:90: Raft:0 term:1 | Persist data! Size:   98 logs:   0
+InfoRaft:2021/02/28 23:56:00 raft.go:90: Raft:1 term:1 | Persist data! Size:   98 logs:   0
+InfoRaft:2021/02/28 23:56:00 raft.go:90: Raft:0 term:1 | Persist data! Size:   98 logs:   0
+InfoRaft:2021/02/28 23:56:00 raft.go:90: Raft:2 term:1 | Persist data! Size:   98 logs:   0
+Raft:2021/02/28 23:50:46 raft.go:91: Raft:1 term:1 | Persist data! Size:   98 logs:   0
 InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:3 term:1 | Persist data! Size:   98 logs:   0
 InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:0 term:1 | Persist data! Size:   98 logs:   0
 InfoRaft:2021/02/28 23:50:46 raft.go:91: Raft:0 term:1 | Persist data! Size:   98 logs:   0
