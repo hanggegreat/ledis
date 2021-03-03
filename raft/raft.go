@@ -17,11 +17,6 @@ type ApplyMsg struct {
 	CommitTerm int
 	// 交付信息时 raft 的角色
 	Role string
-
-	SnapshotValid bool
-	Snapshot      []byte
-	SnapshotTerm  int
-	SnapshotIndex int
 }
 
 // 每一个 raft peer 都叫 server，分为 Leader, Candidate, Follower 三种角色

@@ -190,8 +190,7 @@ func (rf *Raft) broadcastEntries() {
 				next := rf.nextIndex[server]
 				// nextIndex 已经被快照了，需要发送完整日志
 				if next <= rf.lastIncludedIndex {
-					// TODO
-					//rf.sendSnapshot(server)
+					rf.sendSnapshot(server)
 					return
 				}
 
