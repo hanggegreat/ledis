@@ -33,9 +33,6 @@ func TestInitialElection2A(t *testing.T) {
 	// election, then check that all peers agree on the term.
 	time.Sleep(50 * time.Millisecond)
 	term1 := cfg.checkTerms()
-	if term1 < 1 {
-		t.Fatalf("term is %v, but should be at least 1", term1)
-	}
 
 	// does the leader+term stay the same if there is no network failure?
 	time.Sleep(2 * RaftElectionTimeout)
@@ -87,7 +84,7 @@ func TestReElection2A(t *testing.T) {
 }
 
 func TestBasicAgree2B(t *testing.T) {
-	servers := 3
+	servers := 5
 	cfg := make_config(t, servers, false)
 	defer cfg.cleanup()
 
@@ -109,41 +106,6 @@ func TestBasicAgree2B(t *testing.T) {
 	cfg.end()
 }
 
-//
-// check, based on counting bytes of RPCs, that
-// each command is sent to each peer just once.
-//
-func TestRPCBytes2B(t *testing.T) {
-	servers := 3
-	cfg := make_config(t, servers, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (2B): RPC byte count")
-
-	cfg.one(99, servers, false)
-	bytes0 := cfg.bytesTotal()
-
-	iters := 10
-	var sent int64 = 0
-	for index := 2; index < iters+2; index++ {
-		cmd := randstring(5000)
-		xindex := cfg.one(cmd, servers, false)
-		if xindex != index {
-			t.Fatalf("got index %v but expected %v", xindex, index)
-		}
-		sent += int64(len(cmd))
-	}
-
-	bytes1 := cfg.bytesTotal()
-	got := bytes1 - bytes0
-	expected := int64(servers) * sent
-	if got > expected+50000 {
-		t.Fatalf("too many RPC bytes; got %v, expected %v", got, expected)
-	}
-
-	cfg.end()
-}
-
 func TestFailAgree2B(t *testing.T) {
 	servers := 3
 	cfg := make_config(t, servers, false)
@@ -153,12 +115,11 @@ func TestFailAgree2B(t *testing.T) {
 
 	cfg.one(101, servers, false)
 
-	// disconnect one follower from the network.
+	// follower network disconnection
 	leader := cfg.checkOneLeader()
 	cfg.disconnect((leader + 1) % servers)
 
-	// the leader and remaining follower should be
-	// able to agree despite the disconnected follower.
+	// agree despite one disconnected server?
 	cfg.one(102, servers-1, false)
 	cfg.one(103, servers-1, false)
 	time.Sleep(RaftElectionTimeout)
@@ -168,9 +129,7 @@ func TestFailAgree2B(t *testing.T) {
 	// re-connect
 	cfg.connect((leader + 1) % servers)
 
-	// the full set of servers should preserve
-	// previous agreements, and be able to agree
-	// on new commands.
+	// agree with full set of servers?
 	cfg.one(106, servers, true)
 	time.Sleep(RaftElectionTimeout)
 	cfg.one(107, servers, true)
@@ -189,6 +148,7 @@ func TestFailNoAgree2B(t *testing.T) {
 
 	// 3 of 5 followers disconnect
 	leader := cfg.checkOneLeader()
+	//这三个server与集群失联了
 	cfg.disconnect((leader + 1) % servers)
 	cfg.disconnect((leader + 2) % servers)
 	cfg.disconnect((leader + 3) % servers)
@@ -337,6 +297,14 @@ func TestRejoin2B(t *testing.T) {
 
 	cfg.begin("Test (2B): rejoin of partitioned leader")
 
+	DPrintf(true, "info", "\n")
+	DPrintf(true, "info", "TestRejoin2B!\n")
+	DPrintf(true, "info", "\n")
+
+	DPrintf(true, "warn", "\n")
+	DPrintf(true, "warn", "TestRejoin2B!\n")
+	DPrintf(true, "warn", "\n")
+
 	cfg.one(101, servers, true)
 
 	// leader network failure
@@ -374,6 +342,14 @@ func TestBackup2B(t *testing.T) {
 	defer cfg.cleanup()
 
 	cfg.begin("Test (2B): leader backs up quickly over incorrect follower logs")
+
+	DPrintf(true, "info", "\n")
+	DPrintf(true, "info", "TestBackup2B!\n")
+	DPrintf(true, "info", "\n")
+
+	DPrintf(true, "warn", "\n")
+	DPrintf(true, "warn", "TestBackup2B!\n")
+	DPrintf(true, "warn", "\n")
 
 	cfg.one(rand.Int(), servers, true)
 

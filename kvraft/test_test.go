@@ -1,8 +1,10 @@
 package kvraft
 
-import "../porcupine"
-import "../models"
-import "testing"
+import (
+	"distributed-project/models"
+	"distributed-project/porcupine"
+	"testing"
+)
 import "strconv"
 import "time"
 import "math/rand"
@@ -438,7 +440,6 @@ func GenericTestLinearizability(t *testing.T, part string, nclients int, nserver
 				fmt.Printf("info: wrote history visualization to %s\n", file.Name())
 			}
 		}
-		t.Fatal("history is not linearizable")
 		t.Fatal("history is not linearizable")
 	} else if res == porcupine.Unknown {
 		fmt.Println("info: linearizability check timed out, assuming history is ok")

@@ -1,7 +1,9 @@
 package models
 
-import "../porcupine"
-import "fmt"
+import (
+	"distributed-project/porcupine"
+	"fmt"
+)
 import "sort"
 
 type KvInput struct {

@@ -1,33 +1,52 @@
 package kvraft
 
+import (
+	"crypto/rand"
+	"math/big"
+)
+
 const (
-	OK             = "OK"
-	ErrNoKey       = "ErrNoKey"
-	ErrWrongLeader = "ErrWrongLeader"
+	OK       = "OK"
+	ErrNoKey = "ErrNoKey"
 )
 
 type Err string
 
-// Put or Append
 type PutAppendArgs struct {
 	Key   string
 	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	// Put 或者 Append
+	Op string
+
+	// 发送消息的 clerk 编号
+	ClerkId int64
+	// 这个 clerk 发送的消息编号，自增
+	CmdIndex int
 }
 
 type PutAppendReply struct {
-	Err Err
+	WrongLeader bool
+	Err         Err
 }
 
 type GetArgs struct {
 	Key string
-	// You'll have to add definitions here.
+	// 发送消息的 clerk 编号
+	ClerkId int64
+	// 这个 clerk 发送的消息编号，自增
+	CmdIndex int
 }
 
 type GetReply struct {
-	Err   Err
-	Value string
+	// 请求的 server 不是 Leader 时为 true
+	WrongLeader bool
+	Err         Err
+	Value       string
+}
+
+func nrand() int64 {
+	max := big.NewInt(int64(1) << 62)
+	bigx, _ := rand.Int(rand.Reader, max)
+	x := bigx.Int64()
+	return x
 }
