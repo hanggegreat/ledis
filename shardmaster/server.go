@@ -65,7 +65,7 @@ func (sm *ShardMaster) run() {
 				cfg := sm.getLastCfg()
 				for gid, svs := range op.Servers {
 					// 不存在说明才是新加入的集群
-					if _, ok := sm.g2shard[gid]; !ok{
+					if _, ok := sm.g2shard[gid]; !ok {
 						flag = true
 						cfg.Groups[gid] = svs
 						sm.g2shard[gid] = []int{}
@@ -110,12 +110,11 @@ func (sm *ShardMaster) run() {
 				cfg.Shards[op.Shard] = gid
 			case Query:
 			}
-
-			if ch, ok := sm.msgCh[index]; ok {
-				ch <- struct{}{}
-			}
-			sm.mu.Unlock()
 		}
+		if ch, ok := sm.msgCh[index]; ok {
+			ch <- struct{}{}
+		}
+		sm.mu.Unlock()
 	}
 }
 
@@ -245,6 +244,19 @@ func (sm *ShardMaster) naiveAssign() {
 			sm.g2shard[gid] = append(sm.g2shard[gid], curShard)
 			gMap[tOk] = gMap[tOk][1:]
 			gMap[tPlus] = append(gMap[tPlus], gid)
+		}
+	}
+
+	for len(gMap[tLess]) != 0 {
+		gid := gMap[tPlus][0]
+		gMap[tPlus] = gMap[tPlus][1:]
+		curShard := sm.getLastShard(gid)
+		sm.g2shard[gid] = sm.cutG2shard(gid)
+		gidLess := gMap[tLess][0]
+		cfg.Shards[curShard] = gidLess
+		sm.g2shard[gidLess] = append(sm.g2shard[gidLess], curShard)
+		if len(sm.g2shard[gidLess]) == share {
+			gMap[tLess] = gMap[tLess][1:]
 		}
 	}
 }
