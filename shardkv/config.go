@@ -108,7 +108,7 @@ func (cfg *config) mastername(i int) string {
 	return "master" + strconv.Itoa(i)
 }
 
-// shard server name for labrpc.
+// Shard server name for labrpc.
 // i'th server of group gid.
 func (cfg *config) servername(gid int, i int) string {
 	return "server-" + strconv.Itoa(gid) + "-" + strconv.Itoa(i)

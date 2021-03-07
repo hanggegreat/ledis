@@ -1,8 +1,10 @@
 package shardkv
 
-import "../porcupine"
-import "../models"
-import "testing"
+import (
+	"distributed-project/models"
+	"distributed-project/porcupine"
+	"testing"
+)
 import "strconv"
 import "time"
 import "fmt"
@@ -21,7 +23,7 @@ func check(t *testing.T, ck *Clerk, key string, value string) {
 }
 
 //
-// test static 2-way sharding, without shard movement.
+// test static 2-way sharding, without Shard movement.
 //
 func TestStaticShards(t *testing.T) {
 	fmt.Printf("Test: static shards ...\n")
@@ -47,7 +49,7 @@ func TestStaticShards(t *testing.T) {
 	}
 
 	// make sure that the data really is sharded by
-	// shutting down one shard and checking that some
+	// shutting down one Shard and checking that some
 	// Get()s don't succeed.
 	cfg.ShutdownGroup(1)
 	cfg.checklogs() // forbid snapshots
@@ -75,10 +77,10 @@ func TestStaticShards(t *testing.T) {
 	}
 
 	if ndone != 5 {
-		t.Fatalf("expected 5 completions with one shard dead; got %v\n", ndone)
+		t.Fatalf("expected 5 completions with one Shard dead; got %v\n", ndone)
 	}
 
-	// bring the crashed shard/group back to life.
+	// bring the crashed Shard/group back to life.
 	cfg.StartGroup(1)
 	for i := 0; i < n; i++ {
 		check(t, ck, ka[i], va[i])
@@ -373,7 +375,7 @@ func TestConcurrent1(t *testing.T) {
 
 //
 // this tests the various sources from which a re-starting
-// group might need to fetch shard contents.
+// group might need to fetch Shard contents.
 //
 func TestConcurrent2(t *testing.T) {
 	fmt.Printf("Test: more concurrent puts and configuration changes...\n")
@@ -661,7 +663,7 @@ func TestUnreliable3(t *testing.T) {
 // shards for which they are no longer responsible.
 //
 func TestChallenge1Delete(t *testing.T) {
-	fmt.Printf("Test: shard deletion (challenge 1) ...\n")
+	fmt.Printf("Test: Shard deletion (challenge 1) ...\n")
 
 	// "1" means force snapshot after every log entry.
 	cfg := make_config(t, 3, false, 1)
@@ -815,7 +817,7 @@ func TestChallenge1Concurrent(t *testing.T) {
 // while the config change is underway
 //
 func TestChallenge2Unaffected(t *testing.T) {
-	fmt.Printf("Test: unaffected shard access (challenge 2) ...\n")
+	fmt.Printf("Test: unaffected Shard access (challenge 2) ...\n")
 
 	cfg := make_config(t, 3, true, 100)
 	defer cfg.cleanup()
@@ -847,7 +849,7 @@ func TestChallenge2Unaffected(t *testing.T) {
 
 	// Wait for migration to new config to complete, and for clients to
 	// start using this updated config. Gets to any key k such that
-	// owned[shard(k)] == true should now be served by group 101.
+	// owned[Shard(k)] == true should now be served by group 101.
 	<-time.After(1 * time.Second)
 	for i := 0; i < n; i++ {
 		if owned[i] {
@@ -885,7 +887,7 @@ func TestChallenge2Unaffected(t *testing.T) {
 // has not yet completed.
 //
 func TestChallenge2Partial(t *testing.T) {
-	fmt.Printf("Test: partial migration shard access (challenge 2) ...\n")
+	fmt.Printf("Test: partial migration Shard access (challenge 2) ...\n")
 
 	cfg := make_config(t, 3, true, 100)
 	defer cfg.cleanup()
