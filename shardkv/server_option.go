@@ -2,6 +2,7 @@ package shardkv
 
 import (
 	"distributed-project/raft"
+	"distributed-project/shardmaster"
 	"time"
 )
 
@@ -18,7 +19,7 @@ func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
 			request,
 			args.Shard,
 			nil,
-			nil,
+			shardmaster.Config{},
 			&Request{
 				Get,
 				args.Key,
@@ -62,7 +63,7 @@ func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 			request,
 			args.Shard,
 			nil,
-			nil,
+			shardmaster.Config{},
 			&Request{
 				op,
 				args.Key,
@@ -146,4 +147,9 @@ func (kv *ShardKV) executeOp(op Op) (wrongLeader, wrongGroup bool) {
 
 	go kv.closeCh(index)
 	return
+}
+
+// 判断执行成功的命令是否和发起的相同
+func (kv *ShardKV) equal(begin, done Op) bool {
+	return begin.Type == done.Type && begin.Shard == done.Shard && begin.Clerk == done.Clerk && begin.CmdIndex == done.CmdIndex
 }

@@ -15,7 +15,7 @@ type Op struct {
 	Shard int
 
 	NewShard  *NewShard
-	NewConfig *shardmaster.Config
+	NewConfig shardmaster.Config
 	Request   *Request
 
 	Clerk    int64
@@ -45,7 +45,7 @@ type ShardKV struct {
 	// 配置更新后需要发送的 shards
 	shardsToSend []int
 	// 当前配置
-	cfg *shardmaster.Config
+	cfg shardmaster.Config
 	// 判断自己是不是 Leader
 	isLeader  bool
 	persister *raft.Persister
@@ -71,14 +71,13 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister,
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-
 	kv.sm = shardmaster.MakeClerk(kv.masters)
 	kv.msgCh = make(map[int]chan MsgCh)
 	kv.sClerkLog = make(map[int]map[int64]int)
 	kv.skvDB = make(map[int]map[string]string)
 	kv.shards = make(map[int]struct{})
 
-	kv.cfg = &shardmaster.Config{
+	kv.cfg = shardmaster.Config{
 		Num:    0,
 		Shards: [10]int{},
 		Groups: make(map[int][]string),
@@ -183,7 +182,7 @@ func (kv *ShardKV) run() {
 					raft.ShardInfo.Printf("GID:%2d me:%2d Cfg:%2d leader:%6v|apply Op{%v} index:%4d\n", kv.gid, kv.me, kv.cfg.Num, kv.isLeader, op, index)
 
 					kv.sClerkLog[op.Shard][op.Clerk] = op.CmdIndex
-					switch op.Type {
+					switch op.Request.Operation {
 					case Put:
 						kv.skvDB[op.Shard][op.Request.Key] = op.Request.Value
 					case Append:
@@ -228,7 +227,7 @@ func (kv *ShardKV) convertToLeader(isLeader bool) {
 			newLeader,
 			1,
 			nil,
-			nil,
+			shardmaster.Config{},
 			nil,
 			-1,
 			-1,
@@ -244,11 +243,6 @@ func (kv *ShardKV) convertToLeader(isLeader bool) {
 		kv.parseCfg()
 		kv.broadShard()
 	}
-}
-
-// 判断执行成功的命令是否和发起的相同
-func (kv *ShardKV) equal(begin, done Op) bool {
-	return begin.Type == done.Type && begin.Shard == done.Shard && begin.Clerk == done.Clerk && begin.CmdIndex == done.CmdIndex
 }
 
 func (kv *ShardKV) checkLeader() (isLeader bool) {

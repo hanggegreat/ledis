@@ -46,7 +46,7 @@ func (kv *ShardKV) decodedSnapshot(data []byte) {
 	} else {
 		kv.skvDB = db
 		kv.sClerkLog = cl
-		kv.cfg = &cfg
+		kv.cfg = cfg
 		raft.ShardInfo.Printf("GID:%2d me:%2d Cfg:%2d leader:%6v| KV recover from snapshot successful! \n", kv.gid, kv.me, kv.cfg.Num, kv.isLeader)
 	}
 }

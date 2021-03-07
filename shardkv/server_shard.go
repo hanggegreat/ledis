@@ -2,6 +2,7 @@ package shardkv
 
 import (
 	"distributed-project/raft"
+	"distributed-project/shardmaster"
 	"time"
 )
 
@@ -63,7 +64,7 @@ func (kv *ShardKV) sendShard(shard int, cfgNum int) {
 						newSend,
 						shard,
 						nil,
-						nil,
+						shardmaster.Config{},
 						nil,
 						-1,
 						-1,
@@ -102,6 +103,53 @@ type PushShardArgs struct {
 
 type PushShardReply struct {
 	WrongLeader bool
+}
+
+// 新集群接收shard逻辑
+func (kv *ShardKV) PushShard(args *PushShardArgs, reply *PushShardReply) {
+	kv.mu.Lock()
+
+	raft.ShardInfo.Printf("GID:%2d me:%2d cfg:%2d leader:%6v| receive shard %2d from gid:%2d cfg:%2d need{%v} args{%v}\n", kv.gid, kv.me, kv.cfg.Num, kv.isLeader, args.Shard, args.GID, args.CfgNum, kv.needShards(), args)
+
+	if kv.isLeader && args.CfgNum < kv.cfg.Num {
+		reply.WrongLeader = false
+		kv.mu.Unlock()
+		return
+	}
+	if !kv.isLeader || args.CfgNum > kv.cfg.Num || !kv.haveShard(args.Shard) {
+		reply.WrongLeader = true
+		kv.mu.Unlock()
+		return
+	}
+
+	if kv.shardInHand(args.Shard) {
+		kv.mu.Unlock()
+		reply.WrongLeader = false
+		return
+	}
+
+	kv.mu.Unlock()
+	op := Op{
+		newShard,
+		args.Shard,
+		&NewShard{
+			args.ShardDB, args.ClerkLog,
+		},
+		shardmaster.Config{},
+		nil,
+		-1,
+		-1,
+	}
+
+	wrongLeader, wrongGroup := kv.executeOp(op)
+	reply.WrongLeader = true
+	if !wrongLeader && !wrongGroup {
+		reply.WrongLeader = false
+		raft.ShardInfo.Printf("GID:%2d me:%2d cfg:%2d leader:%6v| add new shard %d done! \n", kv.gid, kv.me, kv.cfg.Num, kv.isLeader, args.Shard)
+	}
+
+	return
+
 }
 
 // 配置中是否拥有该 shard

@@ -71,10 +71,10 @@ func (kv *ShardKV) getCfg() {
 			newConfig,
 			1,
 			nil,
-			&cfg,
+			cfg,
 			nil,
-			-1,
-			-1,
+			1,
+			1,
 		}
 
 		kv.mu.Unlock()
