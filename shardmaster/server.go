@@ -1,9 +1,9 @@
 package shardmaster
 
 import (
-	"distributed-project/labgob"
-	"distributed-project/labrpc"
-	"distributed-project/raft"
+	"ledis/labgob"
+	"ledis/labrpc"
+	"ledis/raft"
 	"sync"
 	"time"
 )

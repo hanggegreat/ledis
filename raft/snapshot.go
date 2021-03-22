@@ -2,7 +2,7 @@ package raft
 
 import (
 	"bytes"
-	"distributed-project/labgob"
+	"ledis/labgob"
 	"time"
 )
 
@@ -30,7 +30,7 @@ func (rf *Raft) TakeSnapshot(snapshot []byte, appliedId int, term int) {
 		return
 	}
 
-	newLogs := make([]Entries, 0)
+	newLogs := make([]Entry, 0)
 	newLogs = append(newLogs, rf.logs[rf.subIdx(appliedId):]...)
 	rf.logs = newLogs
 	rf.lastIncludedTerm = term
@@ -57,12 +57,12 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	dropAndSet(rf.appendCh)
 
-	logs := make([]Entries, 0)
+	logs := make([]Entry, 0)
 	// 直接从 rf.logs 截取新 logs
 	if args.LastIncludedIndex <= rf.getLastLogIndex() {
 		logs = append(logs, rf.logs[rf.subIdx(args.LastIncludedIndex):]...)
 	} else {
-		logs = append(logs, Entries{args.LastIncludedTerm, args.LastIncludedIndex, -1})
+		logs = append(logs, Entry{args.LastIncludedTerm, args.LastIncludedIndex, -1})
 	}
 
 	rf.logs = logs

@@ -1,8 +1,8 @@
 package kvraft
 
 import (
-	"distributed-project/models"
-	"distributed-project/porcupine"
+	"ledis/models"
+	"ledis/porcupine"
 	"testing"
 )
 import "strconv"

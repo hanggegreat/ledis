@@ -9,7 +9,7 @@ package raft
 //
 
 import (
-	"distributed-project/labrpc"
+	"ledis/labrpc"
 	"log"
 )
 import "sync"

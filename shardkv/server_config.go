@@ -1,8 +1,8 @@
 package shardkv
 
 import (
-	"distributed-project/raft"
-	"distributed-project/shardmaster"
+	"ledis/raft"
+	"ledis/shardmaster"
 	"time"
 )
 

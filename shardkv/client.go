@@ -1,8 +1,8 @@
 package shardkv
 
 import (
-	"distributed-project/labrpc"
-	"distributed-project/shardmaster"
+	"ledis/labrpc"
+	"ledis/shardmaster"
 	"sync/atomic"
 )
 import "time"

@@ -2,8 +2,8 @@ package raft
 
 import (
 	"bytes"
-	"distributed-project/labgob"
-	"distributed-project/labrpc"
+	"ledis/labgob"
+	"ledis/labrpc"
 	"sync"
 	"time"
 )
@@ -36,7 +36,7 @@ type Raft struct {
 	// 所投的 server index, 初始化为 VoteNil(-1), 没有投票给其他人
 	votedFor int
 	// 保存执行的命令，index 从 1 开始
-	logs []Entries
+	logs []Entry
 	// 最后一个提交的日志 index
 	commitIndex int
 	// 最后一个应用到状态机的日志 index, 从 0 开始
@@ -72,6 +72,7 @@ func (rf *Raft) GetState() (int, bool) {
 	return rf.currentTerm, rf.role == Leader
 }
 
+// 持久化操作，将状态信息和日志信息持久化到硬盘中
 func (rf *Raft) persist() {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
@@ -85,6 +86,7 @@ func (rf *Raft) persist() {
 	InfoRaft.Printf("Raft:%d term:%d | Persist data! Size:%5v logs:%4v\n", rf.me, rf.currentTerm, len(data), len(rf.logs)-1)
 }
 
+// 从硬盘中读取状态信息和日志数据到内存中
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 {
 		return
@@ -94,7 +96,7 @@ func (rf *Raft) readPersist(data []byte) {
 
 	var term int
 	var votedFor int
-	var logs []Entries
+	var logs []Entry
 	var lastIncludedIndex int
 	var lastIncludedTerm int
 
@@ -153,7 +155,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	if isLeader {
 		index = rf.getLastLogIndex() + 1
-		rf.logs = append(rf.logs, Entries{rf.currentTerm, index, command})
+		rf.logs = append(rf.logs, Entry{rf.currentTerm, index, command})
 		InfoRaft.Printf("Raft:%d term:%d | Leader receive a new command:%v cmdIndex:%v commitIndex:%v\n", rf.me, rf.currentTerm, command, index, rf.commitIndex)
 		rf.persist()
 	}
@@ -179,8 +181,11 @@ func (rf *Raft) ticker() {
 		switch role {
 		case Follower:
 			select {
+			// 收到候选人请求投票消息
 			case <-rf.voteCh:
+			// 收到 Leader 的心跳消息
 			case <-rf.appendCh:
+			// 超时了哦，变身候选人
 			case <-time.After(electionTimeout()):
 				rf.mu.Lock()
 				rf.convertRole(Candidate)
@@ -190,8 +195,11 @@ func (rf *Raft) ticker() {
 			go rf.leaderElection()
 
 			select {
+			// 收到候选人请求投票消息
 			case <-rf.voteCh:
+			// 收到 Leader 的心跳消息
 			case <-rf.appendCh:
+			// 超时了哦，再次变身候选人
 			case <-rf.leaderCh:
 			case <-time.After(electionTimeout()):
 				rf.mu.Lock()
@@ -199,6 +207,7 @@ func (rf *Raft) ticker() {
 				rf.mu.Unlock()
 			}
 		case Leader:
+			// 广播心跳
 			rf.broadcastEntries()
 			<-time.After(HeartbeatInterval)
 		}
@@ -217,7 +226,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 
 
 	// 第 0 个占位
-	rf.logs = make([]Entries, 1)
+	rf.logs = make([]Entry, 1)
 
 	rf.commitIndex = 0
 	rf.lastApplied = 0
@@ -236,7 +245,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.lastIncludedTerm = 0
 
 	rf.readPersist(persister.ReadRaftState())
-	rf.logs[0] = Entries{rf.lastIncludedTerm, rf.lastIncludedTerm, -1}
+	rf.logs[0] = Entry{rf.lastIncludedTerm, rf.lastIncludedTerm, -1}
 
 	InfoRaft.Printf("Create a new Raft:[%d]! term:[%d]! Log length:[%d]\n", rf.me, rf.currentTerm, rf.getLastLogIndex())
 

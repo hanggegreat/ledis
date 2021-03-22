@@ -1,9 +1,9 @@
 package shardkv
 
 import (
-	"distributed-project/labrpc"
-	"distributed-project/raft"
-	"distributed-project/shardmaster"
+	"ledis/labrpc"
+	"ledis/raft"
+	"ledis/shardmaster"
 	"testing"
 )
 import "os"

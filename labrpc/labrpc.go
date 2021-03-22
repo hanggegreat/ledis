@@ -51,7 +51,7 @@ package labrpc
 
 import (
 	"bytes"
-	"distributed-project/labgob"
+	"ledis/labgob"
 )
 import "reflect"
 import "sync"

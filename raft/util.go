@@ -40,7 +40,6 @@ func init() {
 	WarnRaft = log.New(io.MultiWriter(os.Stderr, warnFile), "WarnRaft:", log.Ldate | log.Ltime | log.Lshortfile)
 	InfoKV = log.New(io.MultiWriter(os.Stderr, InfoKVFile), "InfoKV:", log.Ldate | log.Ltime | log.Lshortfile)
 
-	//lab4中，lab2,lab3的日志只输出到文件，不在屏幕显示
 	//InfoRaft = log.New(io.MultiWriter(infoFile), "InfoRaft:", log.Ldate | log.Ltime | log.Lshortfile)
 	//WarnRaft = log.New(io.MultiWriter(warnFile), "WarnRaft:", log.Ldate | log.Ltime | log.Lshortfile)
 	//InfoKV = log.New(io.MultiWriter(InfoKVFile), "InfoKV:", log.Ldate | log.Ltime | log.Lshortfile)
@@ -49,10 +48,23 @@ func init() {
 
 // 排除通道内已有元素
 func dropAndSet(ch chan bool) {
-
 	select {
 	case <-ch:
 	default:
 	}
 	ch <- true
+}
+
+func DPrintf(show bool, level string, format string, a ...interface{}) (n int, err error) {
+	if show == false{
+		//是否打印当前raft实例的log
+		return
+	}
+
+	if level == "info"{
+		InfoRaft.Printf(format, a...)
+	}else if level == "warn"{
+		WarnRaft.Printf(format, a...)
+	}
+	return
 }

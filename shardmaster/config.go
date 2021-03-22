@@ -1,8 +1,8 @@
 package shardmaster
 
 import (
-	"distributed-project/labrpc"
-	"distributed-project/raft"
+	"ledis/labrpc"
+	"ledis/raft"
 	"testing"
 )
 import "os"

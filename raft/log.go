@@ -1,23 +1,29 @@
 package raft
 
-import "sync"
+import (
+	"sync"
+)
 
-type Entries struct {
-	// 该日志所属的Term
+type Entry struct {
+	// 该日志所属的 Term
 	Term int
-	// 该日志在 log 的 index
+	// 该日志的 index（全局）
 	Index   int
+	// 日志对应的命令
 	Command interface{}
 }
 
 type AppendEntriesArgs struct {
 	// Leader 的 Term
 	Term     int
+	// Leader 的 Id
 	LeaderId int
 	// PreLogIndex 和 PrevLogTerm 用来确定 Leader 和收到这条信息的 Follower 上一条同步的信息，方便回滚
 	PrevLogIndex int
 	PrevLogTerm  int
-	Entries      []Entries
+	// 所有日志
+	Entries      []Entry
+	// Leader提交的最后一条日志 Index
 	LeaderCommit int
 }
 
@@ -84,31 +90,34 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.convertRole(Follower)
 	}
 
+	// 向 appendCh 中发送数据，表示接受到 Leader 的心跳
 	dropAndSet(rf.appendCh)
 
-	// Follower 日志少了，需要 Leader 将 nextIndex 设置为 conflictIndex
+	// Follower 日志缺失了，需要 Leader 将 nextIndex 设置为 conflictIndex
 	if rf.getLastLogIndex() < args.PrevLogIndex {
 		reply.ConflictIndex = rf.getLastLogIndex() + 1
-		InfoRaft.Printf("Raft:%d term:%d | receive leader:[%d] message but lost any message! curLen:%d prevLoglen:%d len(Entries):%d\n", rf.me, rf.currentTerm, args.LeaderId, rf.getLastLogIndex(), args.PrevLogIndex, len(args.Entries))
+		InfoRaft.Printf("Raft:%d term:%d | receive leader:[%d] message but lost any message! curLen:%d prevLoglen:%d len(Entry):%d\n", rf.me, rf.currentTerm, args.LeaderId, rf.getLastLogIndex(), args.PrevLogIndex, len(args.Entries))
 		return
 	}
 
-	// 已经快照了
+	// Follower 发送过来的数据已经存在了，并且被快照了，直接将 conflictIndex 置为 还未快照的第一个日志索引
 	if rf.lastIncludedIndex > args.PrevLogIndex {
 		reply.ConflictIndex = rf.lastIncludedIndex + 1
 		return
 	}
 
-	// 接收者日志大于等于 Leader 发来的日志 且日志项不匹配
+	// Follower 的日志项和 Leader 的不匹配
+	// 接收者曾经是 Leader，数据还没来得及提交就成为 Follower 了，此时新 Leader 的数据可能和自己的不一样，需要回退掉这部分数据。
 	if args.PrevLogTerm != rf.logs[rf.subIdx(args.PrevLogIndex)].Term {
 		reply.ConflictTerm = rf.logs[rf.subIdx(args.PrevLogIndex)].Term
+		// 找到接受者 conflictTerm 的第一条日志索引
 		for i := args.PrevLogIndex; i > rf.lastIncludedIndex; i-- {
 			if rf.logs[rf.subIdx(i)].Term != reply.ConflictTerm {
 				break
 			}
 			reply.ConflictIndex = i
 		}
-		InfoRaft.Printf("Raft:%d term:%d | receive leader:[%d] message but not match!\n", rf.me, rf.currentTerm, args.LeaderId)
+		InfoRaft.Printf("Raft:%d term:%d | receive leader:[%d] message but not match, conflictTerm: [%d], prevLogTerm: [%d]!\n", rf.me, rf.currentTerm, args.LeaderId, reply.ConflictTerm, args.PrevLogTerm)
 		return
 	}
 
@@ -235,7 +244,7 @@ func (rf *Raft) broadcastEntries() {
 					} else {
 						// 日志不匹配
 						rf.nextIndex[server] = rf.addIdx(1)
-						i := reply.ConflictIndex
+						i := rf.getLastLogIndex()
 						for ; i > rf.lastIncludedIndex; i-- {
 							if rf.logs[rf.subIdx(i)].Term == reply.ConflictTerm {
 								rf.nextIndex[server] = i + 1

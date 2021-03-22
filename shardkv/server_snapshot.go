@@ -2,9 +2,9 @@ package shardkv
 
 import (
 	"bytes"
-	"distributed-project/labgob"
-	"distributed-project/raft"
-	"distributed-project/shardmaster"
+	"ledis/labgob"
+	"ledis/raft"
+	"ledis/shardmaster"
 )
 
 func (kv *ShardKV) checkState(index int, term int) {

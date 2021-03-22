@@ -1,10 +1,10 @@
 package shardkv
 
 import (
-	"distributed-project/labgob"
-	"distributed-project/labrpc"
-	"distributed-project/raft"
-	"distributed-project/shardmaster"
+	"ledis/labgob"
+	"ledis/labrpc"
+	"ledis/raft"
+	"ledis/shardmaster"
 	"sync"
 )
 

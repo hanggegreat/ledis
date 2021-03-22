@@ -1,7 +1,7 @@
 package shardmaster
 
 import (
-	"distributed-project/labrpc"
+	"ledis/labrpc"
 	"sync/atomic"
 	"time"
 )
