@@ -36,7 +36,7 @@ type ShardKV struct {
 	msgCh map[int]chan MsgCh
 	// 保存每个 shard 的 kvDB
 	skvDB map[int]map[string]string
-	// 保存每个 shard 的 AppendEntries
+	// 保存每个 shard 已经执行的最后一条客户端日志索引
 	sClerkLog map[int]map[int64]int
 	// 用于获取配置
 	sm *shardmaster.Clerk
