@@ -7,7 +7,7 @@
 1.  底层为 Raft 层，用来处理 Leader 选举、日志复制、数据持久化和恢复等。
 2.  上层分为两种：ShardMaster 和 ShardKV。
     1.  ShardMaster 负责接收客户端发来的配置信息，进行 Shard 的动态分配，使得各集群负载接近平均值，支持集群的动态添加删除和 Shard 的迁移。
-    2.  ShardKV 为数据库应用层，负责接收客户端的增删改查请求，转发到 Raft 同步到大多数节点后将数据应用到自身的内存中。 ShardMaster 也会定期从 ShardMaster 获取最新的配置信息，根据配置进行 Shard 的动态迁移。
+    2.  ShardKV 为数据库应用层，负责接收客户端的增删改查请求，转发到 Raft 同步到大多数节点后将数据应用到自身的内存中。 ShardKV 也会定期从 ShardMaster 获取最新的配置信息，根据配置进行 Shard 的动态迁移。
     
 
 #### 架构图：
@@ -38,16 +38,16 @@
 
 -   Leader 选举：
     -   每个节点一共可以拥有三种角色：Follower、Leader、Candidate。
-    -   节点拥有随机时长的选举定时器，当一段时间内没有接受到 Leader 发来的心跳时，会自动变身为 Candidate，发起投票请求。
+    -   节点拥有随机时长的选举定时器，当一段时间内没有接收到 Leader 发来的心跳时，会自动变身为 Candidate，发起投票请求。
     -   初始时，所有节点角色均为 Follower，由于每个节点都拥有一个随机时长的选举定时器，因此会先后触发投票请求。
     -   投票过程：投票分为两步：预先投票和正式投票。
     -   预先投票：节点变身 Candidate 后，会将自身 Term 加 1，然后发起一轮预先投票请求，如果获得了超过半数的选票，则发起正式投票请求，否则将 Term 减 1，重复等待接收其他节点的心跳或者选举定时器超时。
     -   正式投票：首先给自己投一票，并向其他所有结点发送投票请求，请求中携带自身的 Term、LastLogTerm、 LastLogIndex信息。之后会有以下逻辑：
         1.  Candidate 若在投票请求过程中受到了其他 Leader 的心跳数据，则退为 Follower，结束竞选。
-        2.  Candidate 的 Term 小于接受者的 Term，认为是无效的投票请求，拒绝投票。
-        3.  Candidate 的 Term 若大于接受者的 Term，则更新 Term，并变身为 Follower。
-        4.  接受者若判断自己已经在该 Term 投过票给其他人，则拒绝投票。
-        5.  接受者若判断 Candidate 的 LastLogTerm 小于自己的 LastLogTerm，则拒绝投票。
+        2.  Candidate 的 Term 小于接收者的 Term，认为是无效的投票请求，拒绝投票。
+        3.  Candidate 的 Term 若大于接收者的 Term，则更新 Term，并变身为 Follower。
+        4.  接收者若判断自己已经在该 Term 投过票给其他人，则拒绝投票。
+        5.  接收者若判断 Candidate 的 LastLogTerm 小于自己的 LastLogTerm，则拒绝投票。
         6.  接收者若判断 Candidate 的 LastLogTerm 等于自己的 LastLogTerm，且 LastLogIndex 小于自己的 LastLogIndex，则拒绝投票。
         7.  其余情况接收者均会投票给 Candidate。
         8.  若 Candidate 在一轮选举中未获得超过半数的选票，则在选举定时器超时后会将 Term 加 1，进行下一轮选举。
@@ -58,7 +58,7 @@
     -   节点在成为 Leader 后，便会定时向 Follower 广播心跳数据，其中包含 Term、Id、commitIndex。还会根据 nextIndex 字典中保存的每个 Follower 需要同步的下一条日志数据，发送还未同步的日志数据。
     -   初始时，每个结点的 nextIndex 均为 Leader 的最后一条日志索引加 1。
     -   Follower 在接收到 Leader 发送的心跳数据后，会有以下逻辑：
-        1.  Leader 的 Term 小于接受者的 Term，认为是日志数据是无效的，回复中会携带自身的 Term 数据。
+        1.  Leader 的 Term 小于接收者的 Term，认为是日志数据是无效的，回复中会携带自身的 Term 数据。
         2.  若接收者的 Term 小于 Leader 的 Term，则会退为 Follower。
         3.  Follower 接收到 Leader 的心跳数据后，判断是否缺失日志，若缺失，则会回复冲突日志索引为缺失的最后一条日志索引。
         4.  如果 Follower 判断 Leader 发来的数据中的 prevLogIndex 位于自身的快照中，则会回复冲突日志索引为快照中最后一条日志索引的下一条。
@@ -70,7 +70,7 @@
         1.  如果 Follower 的 Term 大于自身的 Term 的话，则会退为 Follower，并忽略之后的所有心跳回复。
         2.  如果 Follower 缺失日志，则会根据缺失的日志索引大小更新 nextIndex 字典，并选择发送新的日志数据或者直接发送快照。若发送快照，Follower 会将先截断日志，将快照数据持久化到本地，然后载入到 KV 层，最后等待 Leader 发送后序数据。
         3.  日志数据同步成功，Leader 更新 matchIndex 字典。
-        4.  如果 Follower 判断某条日志已经同步给超过半数的节点，则会更新 CommitIndex。修改 CommitIndex 后，会将上一次提交的日志索引到 CommitIndex 之间的所有操作发送到 KV 层，KV 层根据命令的具体内容做相应的处理。
+        4.  如果 Leader 判断某条日志已经同步给超过半数的节点，则会更新 CommitIndex。修改 CommitIndex 后，会将上一次提交的日志索引到 CommitIndex 之间的所有操作发送到 KV 层，KV 层根据命令的具体内容做相应的处理。
 -   数据恢复 ：
     -   当节点重启后，会加载持久化的数据，首先载入 Raft 层的状态数据，然后载入 KV 层的快照数据，修改 LastLogIndex 和 LastLogTerm 为 CommitIndex 对应日志的 index 和 Term。
     -   载入数据后，从 LastIncludedIndex + 1开始逐条发送日志数据到 KV 层，KV层根据命令的具体内容做相应的处理，直至数据恢复完毕。
@@ -107,7 +107,7 @@
     -   Shards 集合：集群所负责的所有 Shard。
     -   ShardToSend 切片：每次从 ShardMaster 获取到新的元数据后，需要迁移给其他集群的 Shard。
     -   Cfg：保存了从 ShardMaster 获取到的元数据信息。
-    -   WaitUntilMoveDone 计数器：每次从 ShardMaster 获取到新的元数据后，用来保存需要发送给其他集群和需要接受的 Shard 总数，原子自减直至所有涉及到的需要迁移的 Shard 迁移完毕后置为 0。只有 WaitUntilMoveDone 为 0 时才能从 ShardMaster 获取新的元数据信息。
+    -   WaitUntilMoveDone 计数器：每次从 ShardMaster 获取到新的元数据后，用来保存需要发送给其他集群和需要接收的 Shard 总数，原子自减直至所有涉及到的需要迁移的 Shard 迁移完毕后置为 0。只有 WaitUntilMoveDone 为 0 时才能从 ShardMaster 获取新的元数据信息。
 -   数据迁移：
     -   所有的集群间数据迁移均是由已经拥有 Shard 的集群的 Leader 节点主动发起，将 Shard 的数据在内存中快照后直接发送给新的集群，在这期间旧集群不再处理该 Shard 的任何客户端请求。
     -   接收方 Leader 节点接收到 Shard 快照后，保存并同步给 Follower 节点，之后响应同步成功数据。
